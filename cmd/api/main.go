@@ -55,6 +55,12 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authUseCase)
 	authMiddleware := middleware.NewAuthMiddleware(authUseCase)
 
+	// Reporteria setup
+	reporteriaRepo := repositories.NewReporteriaRepository(db.GetDB())
+	reporteriaService := services.NewReporteriaService(reporteriaRepo)
+	reporteriaUseCase := usecases.NewReporteriaUseCase(reporteriaService)
+	reporteriaHandler := handlers.NewReporteriaHandler(reporteriaUseCase)
+
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 
@@ -82,6 +88,7 @@ func main() {
 	routes.SetupUserRoutes(router, userHandler)
 	routes.SetupRecetaRoutes(router, recetaHandler)
 	routes.SetupTurnoRoutes(router, turnoHandler)
+	routes.SetupReporteriaRoutes(router, reporteriaHandler, authMiddleware)
 
 	serverAddr := cfg.Server.Host + ":" + cfg.Server.Port
 	log.Printf("Starting server on %s", serverAddr)
