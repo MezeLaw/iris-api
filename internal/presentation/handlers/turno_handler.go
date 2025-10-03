@@ -1,21 +1,35 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"iris-api/internal/application/usecases"
 	"iris-api/internal/domain/entities"
 )
 
-type TurnoHandler struct {
-	turnoUseCase *usecases.TurnoUseCase
+// TurnoUseCase interface defines the methods needed by TurnoHandler
+type TurnoUseCase interface {
+	CreateTurno(ctx context.Context, req *entities.CreateTurnoRequest) (*entities.Turno, error)
+	GetTurnoByID(ctx context.Context, id int64) (*entities.TurnoConDetalles, error)
+	GetTurnos(ctx context.Context, filter *entities.TurnoFilter) (map[string]interface{}, error)
+	UpdateTurno(ctx context.Context, id int64, req *entities.UpdateTurnoRequest) (*entities.Turno, error)
+	CancelTurno(ctx context.Context, id int64, motivo string) error
+	DeleteTurno(ctx context.Context, id int64) error
+	GetTurnosByDia(ctx context.Context, fecha time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error)
+	GetTurnosBySemana(ctx context.Context, fechaInicio time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error)
+	GetTurnosByProfesional(ctx context.Context, contactologoID int64, fechaDesde, fechaHasta time.Time) ([]*entities.TurnoConDetalles, error)
+	GetProximosTurnosAlert(ctx context.Context) (*entities.ProximosTurnosAlert, error)
 }
 
-func NewTurnoHandler(turnoUseCase *usecases.TurnoUseCase) *TurnoHandler {
+type TurnoHandler struct {
+	turnoUseCase TurnoUseCase
+}
+
+func NewTurnoHandler(turnoUseCase TurnoUseCase) *TurnoHandler {
 	return &TurnoHandler{
 		turnoUseCase: turnoUseCase,
 	}
