@@ -5,19 +5,19 @@ import (
 )
 
 type Receta struct {
-	ID           int64     `json:"id" db:"id"`
-	PacienteID   int64     `json:"paciente_id" db:"paciente_id"`
-	Fecha        time.Time `json:"fecha" db:"fecha"`
-	ODEsfera     float64   `json:"od_esfera" db:"od_esfera"`
-	ODCilindro   float64   `json:"od_cilindro" db:"od_cilindro"`
-	ODEje        int       `json:"od_eje" db:"od_eje"`
-	OIEsfera     float64   `json:"oi_esfera" db:"oi_esfera"`
-	OICilindro   float64   `json:"oi_cilindro" db:"oi_cilindro"`
-	OIEje        int       `json:"oi_eje" db:"oi_eje"`
-	TipoLente    string    `json:"tipo_lente" db:"tipo_lente"`
-	Observaciones string   `json:"observaciones,omitempty" db:"observaciones"`
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+	ID            int64     `json:"id" db:"id"`
+	PacienteID    int64     `json:"paciente_id" db:"paciente_id"`
+	Fecha         time.Time `json:"fecha" db:"fecha"`
+	ODEsfera      float64   `json:"od_esfera" db:"od_esfera"`
+	ODCilindro    float64   `json:"od_cilindro" db:"od_cilindro"`
+	ODEje         int       `json:"od_eje" db:"od_eje"`
+	OIEsfera      float64   `json:"oi_esfera" db:"oi_esfera"`
+	OICilindro    float64   `json:"oi_cilindro" db:"oi_cilindro"`
+	OIEje         int       `json:"oi_eje" db:"oi_eje"`
+	TipoLente     string    `json:"tipo_lente" db:"tipo_lente"`
+	Observaciones string    `json:"observaciones,omitempty" db:"observaciones"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type CreateRecetaRequest struct {
