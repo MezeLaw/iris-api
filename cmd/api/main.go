@@ -33,6 +33,11 @@ func main() {
 	userUseCase := usecases.NewUserUseCase(userService)
 	userHandler := handlers.NewUserHandler(userUseCase)
 
+	recetaRepo := repositories.NewRecetaRepository(db.GetDB())
+	recetaService := services.NewRecetaService(recetaRepo)
+	recetaUseCase := usecases.NewRecetaUseCase(recetaService)
+	recetaHandler := handlers.NewRecetaHandler(recetaUseCase)
+
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 
@@ -53,6 +58,7 @@ func main() {
 	})
 
 	routes.SetupUserRoutes(router, userHandler)
+	routes.SetupRecetaRoutes(router, recetaHandler)
 
 	serverAddr := cfg.Server.Host + ":" + cfg.Server.Port
 	log.Printf("Starting server on %s", serverAddr)
