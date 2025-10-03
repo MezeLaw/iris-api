@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -12,7 +13,9 @@ import (
 	"iris-api/internal/infrastructure/database"
 	"iris-api/internal/infrastructure/repositories"
 	"iris-api/internal/presentation/handlers"
+	"iris-api/internal/presentation/middleware"
 	"iris-api/internal/presentation/routes"
+	"iris-api/pkg/auth"
 	"iris-api/pkg/config"
 )
 
@@ -43,6 +46,15 @@ func main() {
 	turnoUseCase := usecases.NewTurnoUseCase(turnoService)
 	turnoHandler := handlers.NewTurnoHandler(turnoUseCase)
 
+	// Auth setup
+	jwtManager := auth.NewJWTManager(cfg.JWT.Secret, time.Duration(cfg.JWT.ExpirationMinutes)*time.Minute)
+	clientRepo := repositories.NewClientRepository(db.GetDB())
+	authRepo := repositories.NewAuthRepository(db.GetDB())
+	authService := services.NewAuthService(authRepo, clientRepo, jwtManager)
+	authUseCase := usecases.NewAuthUseCase(authService)
+	authHandler := handlers.NewAuthHandler(authUseCase)
+	authMiddleware := middleware.NewAuthMiddleware(authUseCase)
+
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 
@@ -62,6 +74,11 @@ func main() {
 		})
 	})
 
+	// Auth routes (public)
+	routes.SetupAuthRoutes(router, authHandler, authMiddleware)
+
+	// Protected routes - uncomment when ready to protect
+	// For now, routes are public for backward compatibility
 	routes.SetupUserRoutes(router, userHandler)
 	routes.SetupRecetaRoutes(router, recetaHandler)
 	routes.SetupTurnoRoutes(router, turnoHandler)
