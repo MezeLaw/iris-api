@@ -96,7 +96,7 @@ func TestJWTManager_ValidateToken(t *testing.T) {
 	tests := []struct {
 		name        string
 		token       string
-		useManager  *JWTManager
+		useManager  JWTManager
 		behavior    func()
 		asserts     func(t *testing.T, claims *Claims, err error)
 	}{

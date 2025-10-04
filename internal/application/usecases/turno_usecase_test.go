@@ -203,6 +203,268 @@ func TestTurnoUseCase_GetTurnos(t *testing.T) {
 	}
 }
 
+func TestTurnoUseCase_UpdateTurno(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       int64
+		req      *entities.UpdateTurnoRequest
+		behavior func(m *MockTurnoRepo)
+		asserts  func(t *testing.T, turno *entities.Turno, err error)
+	}{
+		{
+			name: "success - updates turno",
+			id:   1,
+			req: &entities.UpdateTurnoRequest{
+				Estado: func() *entities.EstadoTurno { e := entities.EstadoConfirmado; return &e }(),
+			},
+			behavior: func(m *MockTurnoRepo) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.TurnoConDetalles{
+					Turno: entities.Turno{
+						ID:     1,
+						Estado: entities.EstadoPendiente,
+						FechaHora: time.Now().Add(24 * time.Hour),
+					},
+				}, nil)
+				m.On("Update", mock.Anything, int64(1), mock.Anything).Return(&entities.Turno{
+					ID:     1,
+					Estado: entities.EstadoConfirmado,
+				}, nil)
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, turno)
+			},
+		},
+		{
+			name: "error - turno not found",
+			id:   999,
+			req:  &entities.UpdateTurnoRequest{},
+			behavior: func(m *MockTurnoRepo) {
+				m.On("GetByID", mock.Anything, int64(999)).Return(nil, errors.New("not found"))
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turno)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepo)
+			tt.behavior(mockRepo)
+
+			turnoService := services.NewTurnoService(mockRepo)
+			useCase := NewTurnoUseCase(turnoService)
+			turno, err := useCase.UpdateTurno(context.Background(), tt.id, tt.req)
+
+			tt.asserts(t, turno, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestTurnoUseCase_DeleteTurno(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       int64
+		behavior func(m *MockTurnoRepo)
+		asserts  func(t *testing.T, err error)
+	}{
+		{
+			name: "success - deletes turno",
+			id:   1,
+			behavior: func(m *MockTurnoRepo) {
+				m.On("Delete", mock.Anything, int64(1)).Return(nil)
+			},
+			asserts: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "error - repository fails",
+			id:   999,
+			behavior: func(m *MockTurnoRepo) {
+				m.On("Delete", mock.Anything, int64(999)).Return(errors.New("not found"))
+			},
+			asserts: func(t *testing.T, err error) {
+				assert.Error(t, err)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepo)
+			tt.behavior(mockRepo)
+
+			turnoService := services.NewTurnoService(mockRepo)
+			useCase := NewTurnoUseCase(turnoService)
+			err := useCase.DeleteTurno(context.Background(), tt.id)
+
+			tt.asserts(t, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestTurnoUseCase_GetTurnosByDia(t *testing.T) {
+	tests := []struct {
+		name           string
+		fecha          time.Time
+		contactologoID *int64
+		behavior       func(m *MockTurnoRepo)
+		asserts        func(t *testing.T, turnos []*entities.TurnoConDetalles, err error)
+	}{
+		{
+			name:  "success - returns turnos by dia",
+			fecha: time.Now(),
+			behavior: func(m *MockTurnoRepo) {
+				m.On("GetByDia", mock.Anything, mock.Anything, (*int64)(nil)).Return([]*entities.TurnoConDetalles{
+					{Turno: entities.Turno{ID: 1}},
+				}, nil)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, turnos, 1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepo)
+			tt.behavior(mockRepo)
+
+			turnoService := services.NewTurnoService(mockRepo)
+			useCase := NewTurnoUseCase(turnoService)
+			turnos, err := useCase.GetTurnosByDia(context.Background(), tt.fecha, tt.contactologoID)
+
+			tt.asserts(t, turnos, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestTurnoUseCase_GetTurnosBySemana(t *testing.T) {
+	tests := []struct {
+		name           string
+		fechaInicio    time.Time
+		contactologoID *int64
+		behavior       func(m *MockTurnoRepo)
+		asserts        func(t *testing.T, turnos []*entities.TurnoConDetalles, err error)
+	}{
+		{
+			name:        "success - returns turnos by semana",
+			fechaInicio: time.Now(),
+			behavior: func(m *MockTurnoRepo) {
+				m.On("GetBySemana", mock.Anything, mock.Anything, (*int64)(nil)).Return([]*entities.TurnoConDetalles{
+					{Turno: entities.Turno{ID: 1}},
+				}, nil)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, turnos, 1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepo)
+			tt.behavior(mockRepo)
+
+			turnoService := services.NewTurnoService(mockRepo)
+			useCase := NewTurnoUseCase(turnoService)
+			turnos, err := useCase.GetTurnosBySemana(context.Background(), tt.fechaInicio, tt.contactologoID)
+
+			tt.asserts(t, turnos, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestTurnoUseCase_GetTurnosByProfesional(t *testing.T) {
+	tests := []struct {
+		name           string
+		contactologoID int64
+		fechaDesde     time.Time
+		fechaHasta     time.Time
+		behavior       func(m *MockTurnoRepo)
+		asserts        func(t *testing.T, turnos []*entities.TurnoConDetalles, err error)
+	}{
+		{
+			name:           "success - returns turnos by profesional",
+			contactologoID: 1,
+			fechaDesde:     time.Now(),
+			fechaHasta:     time.Now().Add(7 * 24 * time.Hour),
+			behavior: func(m *MockTurnoRepo) {
+				m.On("GetByProfesional", mock.Anything, int64(1), mock.Anything, mock.Anything).Return([]*entities.TurnoConDetalles{
+					{Turno: entities.Turno{ID: 1}},
+				}, nil)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, turnos, 1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepo)
+			tt.behavior(mockRepo)
+
+			turnoService := services.NewTurnoService(mockRepo)
+			useCase := NewTurnoUseCase(turnoService)
+			turnos, err := useCase.GetTurnosByProfesional(context.Background(), tt.contactologoID, tt.fechaDesde, tt.fechaHasta)
+
+			tt.asserts(t, turnos, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestTurnoUseCase_GetProximosTurnosAlert(t *testing.T) {
+	tests := []struct {
+		name     string
+		behavior func(m *MockTurnoRepo)
+		asserts  func(t *testing.T, alert *entities.ProximosTurnosAlert, err error)
+	}{
+		{
+			name: "success - returns alert",
+			behavior: func(m *MockTurnoRepo) {
+				m.On("GetProximosTurnos", mock.Anything, 24).Return([]*entities.TurnoConDetalles{
+					{Turno: entities.Turno{ID: 1}},
+				}, nil)
+				m.On("GetTurnosSinConfirmar", mock.Anything).Return([]*entities.TurnoConDetalles{
+					{Turno: entities.Turno{ID: 2}},
+				}, nil)
+			},
+			asserts: func(t *testing.T, alert *entities.ProximosTurnosAlert, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, alert)
+				assert.Equal(t, 1, alert.Count24h)
+				assert.Equal(t, 1, alert.CountSinConfirmar)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepo)
+			tt.behavior(mockRepo)
+
+			turnoService := services.NewTurnoService(mockRepo)
+			useCase := NewTurnoUseCase(turnoService)
+			alert, err := useCase.GetProximosTurnosAlert(context.Background())
+
+			tt.asserts(t, alert, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
 func TestTurnoUseCase_CancelTurno(t *testing.T) {
 	tests := []struct {
 		name     string

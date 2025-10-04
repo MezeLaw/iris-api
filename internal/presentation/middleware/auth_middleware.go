@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"iris-api/internal/application/usecases"
 	"iris-api/internal/domain/entities"
 )
 
@@ -16,11 +15,15 @@ const (
 	ClientContextKey    = "client_id"
 )
 
-type AuthMiddleware struct {
-	authUseCase *usecases.AuthUseCase
+type AuthUseCase interface {
+	ValidateToken(tokenString string) (*entities.TokenClaims, error)
 }
 
-func NewAuthMiddleware(authUseCase *usecases.AuthUseCase) *AuthMiddleware {
+type AuthMiddleware struct {
+	authUseCase AuthUseCase
+}
+
+func NewAuthMiddleware(authUseCase AuthUseCase) *AuthMiddleware {
 	return &AuthMiddleware{
 		authUseCase: authUseCase,
 	}

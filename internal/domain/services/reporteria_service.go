@@ -7,17 +7,22 @@ import (
 	"iris-api/internal/domain/repositories"
 )
 
-type ReporteriaService struct {
+type ReporteriaService interface {
+	GetPacientesActivos(ctx context.Context, clientID int64) (*entities.ReportePacientesActivos, error)
+	GetPacientesInactivos(ctx context.Context, clientID int64) (*entities.ReportePacientesInactivos, error)
+}
+
+type reporteriaService struct {
 	reporteriaRepo repositories.ReporteriaRepository
 }
 
-func NewReporteriaService(reporteriaRepo repositories.ReporteriaRepository) *ReporteriaService {
-	return &ReporteriaService{
+func NewReporteriaService(reporteriaRepo repositories.ReporteriaRepository) ReporteriaService {
+	return &reporteriaService{
 		reporteriaRepo: reporteriaRepo,
 	}
 }
 
-func (s *ReporteriaService) GetPacientesActivos(ctx context.Context, clientID int64) (*entities.ReportePacientesActivos, error) {
+func (s *reporteriaService) GetPacientesActivos(ctx context.Context, clientID int64) (*entities.ReportePacientesActivos, error) {
 	pacientes, err := s.reporteriaRepo.GetPacientesActivos(ctx, clientID)
 	if err != nil {
 		return nil, err
@@ -29,7 +34,7 @@ func (s *ReporteriaService) GetPacientesActivos(ctx context.Context, clientID in
 	}, nil
 }
 
-func (s *ReporteriaService) GetPacientesInactivos(ctx context.Context, clientID int64) (*entities.ReportePacientesInactivos, error) {
+func (s *reporteriaService) GetPacientesInactivos(ctx context.Context, clientID int64) (*entities.ReportePacientesInactivos, error) {
 	// 60 días = 2 meses aproximadamente
 	diasInactividad := 60
 

@@ -239,6 +239,165 @@ func TestRecetaUseCase_CheckDioptriasChange(t *testing.T) {
 	}
 }
 
+func TestRecetaUseCase_GetRecetasByPacienteID(t *testing.T) {
+	tests := []struct {
+		name       string
+		pacienteID int64
+		limit      int
+		offset     int
+		behavior   func(m *MockRecetaService)
+		asserts    func(t *testing.T, resp *GetRecetasResponse, err error)
+	}{
+		{
+			name:       "success - returns recetas for paciente",
+			pacienteID: 1,
+			limit:      10,
+			offset:     0,
+			behavior: func(m *MockRecetaService) {
+				m.On("GetRecetasByPacienteID", mock.Anything, int64(1), 10, 0).Return([]*entities.Receta{
+					{ID: 1, PacienteID: 1},
+					{ID: 2, PacienteID: 1},
+				}, 15, nil)
+			},
+			asserts: func(t *testing.T, resp *GetRecetasResponse, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, resp)
+				assert.Len(t, resp.Recetas, 2)
+				assert.Equal(t, 15, resp.Total)
+				assert.True(t, resp.HasMore)
+			},
+		},
+		{
+			name:       "error - service fails",
+			pacienteID: 999,
+			limit:      10,
+			offset:     0,
+			behavior: func(m *MockRecetaService) {
+				m.On("GetRecetasByPacienteID", mock.Anything, int64(999), 10, 0).Return(nil, 0, errors.New("database error"))
+			},
+			asserts: func(t *testing.T, resp *GetRecetasResponse, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, resp)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockService := new(MockRecetaService)
+			tt.behavior(mockService)
+
+			useCase := NewRecetaUseCase(mockService)
+			resp, err := useCase.GetRecetasByPacienteID(context.Background(), tt.pacienteID, tt.limit, tt.offset)
+
+			tt.asserts(t, resp, err)
+			mockService.AssertExpectations(t)
+		})
+	}
+}
+
+func TestRecetaUseCase_GetHistorialByPacienteID(t *testing.T) {
+	tests := []struct {
+		name       string
+		pacienteID int64
+		behavior   func(m *MockRecetaService)
+		asserts    func(t *testing.T, recetas []*entities.Receta, err error)
+	}{
+		{
+			name:       "success - returns historial",
+			pacienteID: 1,
+			behavior: func(m *MockRecetaService) {
+				m.On("GetHistorialByPacienteID", mock.Anything, int64(1)).Return([]*entities.Receta{
+					{ID: 1, PacienteID: 1},
+					{ID: 2, PacienteID: 1},
+				}, nil)
+			},
+			asserts: func(t *testing.T, recetas []*entities.Receta, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, recetas, 2)
+			},
+		},
+		{
+			name:       "error - service fails",
+			pacienteID: 999,
+			behavior: func(m *MockRecetaService) {
+				m.On("GetHistorialByPacienteID", mock.Anything, int64(999)).Return(nil, errors.New("not found"))
+			},
+			asserts: func(t *testing.T, recetas []*entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, recetas)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockService := new(MockRecetaService)
+			tt.behavior(mockService)
+
+			useCase := NewRecetaUseCase(mockService)
+			recetas, err := useCase.GetHistorialByPacienteID(context.Background(), tt.pacienteID)
+
+			tt.asserts(t, recetas, err)
+			mockService.AssertExpectations(t)
+		})
+	}
+}
+
+func TestRecetaUseCase_UpdateReceta(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       int64
+		req      *entities.UpdateRecetaRequest
+		behavior func(m *MockRecetaService)
+		asserts  func(t *testing.T, receta *entities.Receta, err error)
+	}{
+		{
+			name: "success - updates receta",
+			id:   1,
+			req: &entities.UpdateRecetaRequest{
+				ODEsfera: func() *float64 { v := -3.0; return &v }(),
+			},
+			behavior: func(m *MockRecetaService) {
+				m.On("UpdateReceta", mock.Anything, int64(1), mock.Anything).Return(&entities.Receta{
+					ID:       1,
+					ODEsfera: -3.0,
+				}, nil)
+			},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, receta)
+				assert.Equal(t, int64(1), receta.ID)
+			},
+		},
+		{
+			name: "error - service fails",
+			id:   999,
+			req:  &entities.UpdateRecetaRequest{},
+			behavior: func(m *MockRecetaService) {
+				m.On("UpdateReceta", mock.Anything, int64(999), mock.Anything).Return(nil, errors.New("not found"))
+			},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, receta)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockService := new(MockRecetaService)
+			tt.behavior(mockService)
+
+			useCase := NewRecetaUseCase(mockService)
+			receta, err := useCase.UpdateReceta(context.Background(), tt.id, tt.req)
+
+			tt.asserts(t, receta, err)
+			mockService.AssertExpectations(t)
+		})
+	}
+}
+
 func TestRecetaUseCase_DeleteReceta(t *testing.T) {
 	tests := []struct {
 		name     string

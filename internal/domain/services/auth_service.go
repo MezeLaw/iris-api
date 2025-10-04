@@ -10,21 +10,28 @@ import (
 	"iris-api/pkg/auth"
 )
 
-type AuthService struct {
-	authRepo   repositories.AuthRepository
-	clientRepo repositories.ClientRepository
-	jwtManager *auth.JWTManager
+type AuthService interface {
+	Register(ctx context.Context, req *entities.RegisterRequest) (*entities.AuthUser, error)
+	Login(ctx context.Context, req *entities.LoginRequest) (*entities.LoginResponse, error)
+	ValidateToken(tokenString string) (*entities.TokenClaims, error)
+	GetUserByID(ctx context.Context, userID int64) (*entities.AuthUser, error)
 }
 
-func NewAuthService(authRepo repositories.AuthRepository, clientRepo repositories.ClientRepository, jwtManager *auth.JWTManager) *AuthService {
-	return &AuthService{
+type authService struct {
+	authRepo   repositories.AuthRepository
+	clientRepo repositories.ClientRepository
+	jwtManager auth.JWTManager
+}
+
+func NewAuthService(authRepo repositories.AuthRepository, clientRepo repositories.ClientRepository, jwtManager auth.JWTManager) AuthService {
+	return &authService{
 		authRepo:   authRepo,
 		clientRepo: clientRepo,
 		jwtManager: jwtManager,
 	}
 }
 
-func (s *AuthService) Register(ctx context.Context, req *entities.RegisterRequest) (*entities.AuthUser, error) {
+func (s *authService) Register(ctx context.Context, req *entities.RegisterRequest) (*entities.AuthUser, error) {
 	// Create new client first
 	client := &entities.Client{
 		Name:      req.ClientName,
@@ -63,7 +70,7 @@ func (s *AuthService) Register(ctx context.Context, req *entities.RegisterReques
 	return s.authRepo.Register(ctx, user)
 }
 
-func (s *AuthService) Login(ctx context.Context, req *entities.LoginRequest) (*entities.LoginResponse, error) {
+func (s *authService) Login(ctx context.Context, req *entities.LoginRequest) (*entities.LoginResponse, error) {
 	// Find user by email (globally unique)
 	user, err := s.authRepo.FindByEmail(ctx, req.Email)
 	if err != nil {
@@ -94,7 +101,7 @@ func (s *AuthService) Login(ctx context.Context, req *entities.LoginRequest) (*e
 	}, nil
 }
 
-func (s *AuthService) ValidateToken(tokenString string) (*entities.TokenClaims, error) {
+func (s *authService) ValidateToken(tokenString string) (*entities.TokenClaims, error) {
 	claims, err := s.jwtManager.ValidateToken(tokenString)
 	if err != nil {
 		return nil, err
@@ -108,7 +115,7 @@ func (s *AuthService) ValidateToken(tokenString string) (*entities.TokenClaims, 
 	}, nil
 }
 
-func (s *AuthService) GetUserByID(ctx context.Context, userID int64) (*entities.AuthUser, error) {
+func (s *authService) GetUserByID(ctx context.Context, userID int64) (*entities.AuthUser, error) {
 	user, err := s.authRepo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, err
