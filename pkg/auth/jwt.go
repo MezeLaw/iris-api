@@ -9,7 +9,12 @@ import (
 	"iris-api/internal/domain/entities"
 )
 
-type JWTManager struct {
+type JWTManager interface {
+	GenerateToken(user *entities.AuthUser) (string, time.Time, error)
+	ValidateToken(tokenString string) (*Claims, error)
+}
+
+type jwtManager struct {
 	secretKey     string
 	tokenDuration time.Duration
 }
@@ -22,14 +27,14 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func NewJWTManager(secretKey string, tokenDuration time.Duration) *JWTManager {
-	return &JWTManager{
+func NewJWTManager(secretKey string, tokenDuration time.Duration) JWTManager {
+	return &jwtManager{
 		secretKey:     secretKey,
 		tokenDuration: tokenDuration,
 	}
 }
 
-func (m *JWTManager) GenerateToken(user *entities.AuthUser) (string, time.Time, error) {
+func (m *jwtManager) GenerateToken(user *entities.AuthUser) (string, time.Time, error) {
 	expiresAt := time.Now().Add(m.tokenDuration)
 
 	claims := &Claims{
@@ -52,7 +57,7 @@ func (m *JWTManager) GenerateToken(user *entities.AuthUser) (string, time.Time, 
 	return tokenString, expiresAt, nil
 }
 
-func (m *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
+func (m *jwtManager) ValidateToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("invalid signing method")

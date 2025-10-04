@@ -1,19 +1,26 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
-	"iris-api/internal/application/usecases"
+	"iris-api/internal/domain/entities"
 	"iris-api/internal/presentation/middleware"
 )
 
-type ReporteriaHandler struct {
-	reporteriaUseCase *usecases.ReporteriaUseCase
+// ReporteriaUseCase interface defines the methods needed by ReporteriaHandler
+type ReporteriaUseCase interface {
+	GetPacientesActivos(ctx context.Context, clientID int64) (*entities.ReportePacientesActivos, error)
+	GetPacientesInactivos(ctx context.Context, clientID int64) (*entities.ReportePacientesInactivos, error)
 }
 
-func NewReporteriaHandler(reporteriaUseCase *usecases.ReporteriaUseCase) *ReporteriaHandler {
+type ReporteriaHandler struct {
+	reporteriaUseCase ReporteriaUseCase
+}
+
+func NewReporteriaHandler(reporteriaUseCase ReporteriaUseCase) *ReporteriaHandler {
 	return &ReporteriaHandler{
 		reporteriaUseCase: reporteriaUseCase,
 	}

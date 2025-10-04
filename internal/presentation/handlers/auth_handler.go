@@ -1,20 +1,28 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
-	"iris-api/internal/application/usecases"
 	"iris-api/internal/domain/entities"
 	"iris-api/internal/presentation/middleware"
 )
 
-type AuthHandler struct {
-	authUseCase *usecases.AuthUseCase
+// AuthUseCase interface defines the methods needed by AuthHandler
+type AuthUseCase interface {
+	Register(ctx context.Context, req *entities.RegisterRequest) (*entities.AuthUser, error)
+	Login(ctx context.Context, req *entities.LoginRequest) (*entities.LoginResponse, error)
+	ValidateToken(token string) (*entities.TokenClaims, error)
+	GetUserByID(ctx context.Context, userID int64) (*entities.AuthUser, error)
 }
 
-func NewAuthHandler(authUseCase *usecases.AuthUseCase) *AuthHandler {
+type AuthHandler struct {
+	authUseCase AuthUseCase
+}
+
+func NewAuthHandler(authUseCase AuthUseCase) *AuthHandler {
 	return &AuthHandler{
 		authUseCase: authUseCase,
 	}

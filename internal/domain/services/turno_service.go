@@ -9,17 +9,31 @@ import (
 	"iris-api/internal/domain/repositories"
 )
 
-type TurnoService struct {
+type TurnoService interface {
+	CreateTurno(ctx context.Context, req *entities.CreateTurnoRequest) (*entities.Turno, error)
+	GetTurnoByID(ctx context.Context, id int64) (*entities.TurnoConDetalles, error)
+	GetTurnos(ctx context.Context, filter *entities.TurnoFilter) ([]*entities.TurnoConDetalles, error)
+	UpdateTurno(ctx context.Context, id int64, req *entities.UpdateTurnoRequest) (*entities.Turno, error)
+	CancelTurno(ctx context.Context, id int64, motivo string) error
+	DeleteTurno(ctx context.Context, id int64) error
+	GetTurnosByDia(ctx context.Context, fecha time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error)
+	GetTurnosBySemana(ctx context.Context, fechaInicio time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error)
+	GetTurnosByProfesional(ctx context.Context, contactologoID int64, fechaDesde, fechaHasta time.Time) ([]*entities.TurnoConDetalles, error)
+	GetProximosTurnosAlert(ctx context.Context) (*entities.ProximosTurnosAlert, error)
+	CountTurnos(ctx context.Context, filter *entities.TurnoFilter) (int, error)
+}
+
+type turnoService struct {
 	turnoRepo repositories.TurnoRepository
 }
 
-func NewTurnoService(turnoRepo repositories.TurnoRepository) *TurnoService {
-	return &TurnoService{
+func NewTurnoService(turnoRepo repositories.TurnoRepository) TurnoService {
+	return &turnoService{
 		turnoRepo: turnoRepo,
 	}
 }
 
-func (s *TurnoService) CreateTurno(ctx context.Context, req *entities.CreateTurnoRequest) (*entities.Turno, error) {
+func (s *turnoService) CreateTurno(ctx context.Context, req *entities.CreateTurnoRequest) (*entities.Turno, error) {
 	// Validar que la fecha no sea en el pasado
 	if req.FechaHora.Before(time.Now()) {
 		return nil, errors.New("no se puede crear un turno en el pasado")
@@ -51,11 +65,11 @@ func (s *TurnoService) CreateTurno(ctx context.Context, req *entities.CreateTurn
 	return s.turnoRepo.Create(ctx, turno)
 }
 
-func (s *TurnoService) GetTurnoByID(ctx context.Context, id int64) (*entities.TurnoConDetalles, error) {
+func (s *turnoService) GetTurnoByID(ctx context.Context, id int64) (*entities.TurnoConDetalles, error) {
 	return s.turnoRepo.GetByID(ctx, id)
 }
 
-func (s *TurnoService) GetTurnos(ctx context.Context, filter *entities.TurnoFilter) ([]*entities.TurnoConDetalles, error) {
+func (s *turnoService) GetTurnos(ctx context.Context, filter *entities.TurnoFilter) ([]*entities.TurnoConDetalles, error) {
 	if filter.Limit <= 0 {
 		filter.Limit = 10
 	}
@@ -66,7 +80,7 @@ func (s *TurnoService) GetTurnos(ctx context.Context, filter *entities.TurnoFilt
 	return s.turnoRepo.GetAll(ctx, filter)
 }
 
-func (s *TurnoService) UpdateTurno(ctx context.Context, id int64, req *entities.UpdateTurnoRequest) (*entities.Turno, error) {
+func (s *turnoService) UpdateTurno(ctx context.Context, id int64, req *entities.UpdateTurnoRequest) (*entities.Turno, error) {
 	// Obtener turno existente
 	existingTurno, err := s.turnoRepo.GetByID(ctx, id)
 	if err != nil {
@@ -135,7 +149,7 @@ func (s *TurnoService) UpdateTurno(ctx context.Context, id int64, req *entities.
 	return s.turnoRepo.Update(ctx, id, turno)
 }
 
-func (s *TurnoService) CancelTurno(ctx context.Context, id int64, motivo string) error {
+func (s *turnoService) CancelTurno(ctx context.Context, id int64, motivo string) error {
 	// Obtener turno existente
 	existingTurno, err := s.turnoRepo.GetByID(ctx, id)
 	if err != nil {
@@ -153,25 +167,25 @@ func (s *TurnoService) CancelTurno(ctx context.Context, id int64, motivo string)
 	return s.turnoRepo.CancelTurno(ctx, id, motivo)
 }
 
-func (s *TurnoService) DeleteTurno(ctx context.Context, id int64) error {
+func (s *turnoService) DeleteTurno(ctx context.Context, id int64) error {
 	return s.turnoRepo.Delete(ctx, id)
 }
 
 // Vistas específicas
-func (s *TurnoService) GetTurnosByDia(ctx context.Context, fecha time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error) {
+func (s *turnoService) GetTurnosByDia(ctx context.Context, fecha time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error) {
 	return s.turnoRepo.GetByDia(ctx, fecha, contactologoID)
 }
 
-func (s *TurnoService) GetTurnosBySemana(ctx context.Context, fechaInicio time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error) {
+func (s *turnoService) GetTurnosBySemana(ctx context.Context, fechaInicio time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error) {
 	return s.turnoRepo.GetBySemana(ctx, fechaInicio, contactologoID)
 }
 
-func (s *TurnoService) GetTurnosByProfesional(ctx context.Context, contactologoID int64, fechaDesde, fechaHasta time.Time) ([]*entities.TurnoConDetalles, error) {
+func (s *turnoService) GetTurnosByProfesional(ctx context.Context, contactologoID int64, fechaDesde, fechaHasta time.Time) ([]*entities.TurnoConDetalles, error) {
 	return s.turnoRepo.GetByProfesional(ctx, contactologoID, fechaDesde, fechaHasta)
 }
 
 // Alertas
-func (s *TurnoService) GetProximosTurnosAlert(ctx context.Context) (*entities.ProximosTurnosAlert, error) {
+func (s *turnoService) GetProximosTurnosAlert(ctx context.Context) (*entities.ProximosTurnosAlert, error) {
 	// Obtener turnos de las próximas 24 horas
 	turnos24h, err := s.turnoRepo.GetProximosTurnos(ctx, 24)
 	if err != nil {
@@ -192,6 +206,6 @@ func (s *TurnoService) GetProximosTurnosAlert(ctx context.Context) (*entities.Pr
 	}, nil
 }
 
-func (s *TurnoService) CountTurnos(ctx context.Context, filter *entities.TurnoFilter) (int, error) {
+func (s *turnoService) CountTurnos(ctx context.Context, filter *entities.TurnoFilter) (int, error) {
 	return s.turnoRepo.Count(ctx, filter)
 }
