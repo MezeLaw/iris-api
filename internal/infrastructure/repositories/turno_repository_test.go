@@ -123,6 +123,19 @@ func TestTurnoRepository_GetByID(t *testing.T) {
 				assert.Contains(t, err.Error(), "turno not found")
 			},
 		},
+		{
+			name: "error - database generic error",
+			id:   1,
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`SELECT (.+) FROM turnos t INNER JOIN users p (.+) INNER JOIN users c (.+) WHERE t.id`).
+					WithArgs(int64(1)).
+					WillReturnError(errors.New("database connection error"))
+			},
+			asserts: func(t *testing.T, turno *entities.TurnoConDetalles, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turno)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -173,6 +186,30 @@ func TestTurnoRepository_Delete(t *testing.T) {
 			asserts: func(t *testing.T, err error) {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "turno not found")
+			},
+		},
+		{
+			name: "error - database exec fails",
+			id:   1,
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec(`DELETE FROM turnos WHERE id`).
+					WithArgs(int64(1)).
+					WillReturnError(errors.New("database error"))
+			},
+			asserts: func(t *testing.T, err error) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name: "error - failed to get rows affected",
+			id:   1,
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec(`DELETE FROM turnos WHERE id`).
+					WithArgs(int64(1)).
+					WillReturnResult(sqlmock.NewErrorResult(errors.New("rows affected error")))
+			},
+			asserts: func(t *testing.T, err error) {
+				assert.Error(t, err)
 			},
 		},
 	}
@@ -226,6 +263,33 @@ func TestTurnoRepository_CancelTurno(t *testing.T) {
 			},
 			asserts: func(t *testing.T, err error) {
 				assert.Error(t, err)
+			},
+		},
+		{
+			name:   "error - failed to get rows affected",
+			id:     1,
+			motivo: "Test",
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec(`UPDATE turnos SET estado = (.+), observaciones = CONCAT`).
+					WithArgs(entities.EstadoCancelado, "Test", sqlmock.AnyArg(), int64(1)).
+					WillReturnResult(sqlmock.NewErrorResult(errors.New("rows affected error")))
+			},
+			asserts: func(t *testing.T, err error) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name:   "error - turno not found (0 rows affected)",
+			id:     999,
+			motivo: "Test",
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec(`UPDATE turnos SET estado = (.+), observaciones = CONCAT`).
+					WithArgs(entities.EstadoCancelado, "Test", sqlmock.AnyArg(), int64(999)).
+					WillReturnResult(sqlmock.NewResult(0, 0))
+			},
+			asserts: func(t *testing.T, err error) {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "turno not found")
 			},
 		},
 	}
@@ -287,6 +351,37 @@ func TestTurnoRepository_CheckDisponibilidad(t *testing.T) {
 			},
 			asserts: func(t *testing.T, disponible bool, err error) {
 				assert.NoError(t, err)
+				assert.False(t, disponible)
+			},
+		},
+		{
+			name:           "success - disponible with excludeTurnoID",
+			contactologoID: 1,
+			fechaHora:      time.Now().Add(24 * time.Hour),
+			duracion:       30,
+			excludeID:      func() *int64 { v := int64(5); return &v }(),
+			behavior: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM turnos`).
+					WillReturnRows(rows)
+			},
+			asserts: func(t *testing.T, disponible bool, err error) {
+				assert.NoError(t, err)
+				assert.True(t, disponible)
+			},
+		},
+		{
+			name:           "error - database fails",
+			contactologoID: 1,
+			fechaHora:      time.Now().Add(24 * time.Hour),
+			duracion:       30,
+			excludeID:      nil,
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM turnos`).
+					WillReturnError(errors.New("database error"))
+			},
+			asserts: func(t *testing.T, disponible bool, err error) {
+				assert.Error(t, err)
 				assert.False(t, disponible)
 			},
 		},
@@ -354,6 +449,19 @@ func TestTurnoRepository_Update(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, turno)
 				assert.Contains(t, err.Error(), "turno not found")
+			},
+		},
+		{
+			name:  "error - database generic error",
+			id:    1,
+			turno: &entities.Turno{},
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`UPDATE turnos SET (.+) WHERE id`).
+					WillReturnError(errors.New("database connection error"))
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turno)
 			},
 		},
 	}
@@ -437,6 +545,126 @@ func TestTurnoRepository_GetAll(t *testing.T) {
 			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
 				assert.NoError(t, err)
 				assert.Len(t, turnos, 1)
+			},
+		},
+		{
+			name: "success - filters by contactologo",
+			filter: &entities.TurnoFilter{
+				ContactologoID: func() *int64 { v := int64(2); return &v }(),
+				Limit:          10,
+				Offset:         0,
+			},
+			behavior: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{
+					"id", "paciente_id", "contactologo_id", "fecha_hora", "duracion_minutos",
+					"tipo_servicio", "estado", "motivo", "observaciones", "recordatorio_enviado",
+					"created_at", "updated_at", "paciente_nombre", "paciente_email",
+					"contactologo_nombre", "contactologo_email",
+				}).AddRow(
+					1, 1, 2, time.Now(), 30,
+					"consulta", entities.EstadoPendiente, "", "", false,
+					time.Now(), time.Now(), "Patient 1", "patient1@example.com",
+					"Doctor 1", "doctor1@example.com",
+				)
+				mock.ExpectQuery(`SELECT (.+) FROM turnos t INNER JOIN`).WillReturnRows(rows)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, turnos, 1)
+			},
+		},
+		{
+			name: "success - filters by tipo_servicio",
+			filter: &entities.TurnoFilter{
+				TipoServicio: func() *entities.TipoServicio { v := entities.TipoServicio("consulta"); return &v }(),
+				Limit:        10,
+				Offset:       0,
+			},
+			behavior: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{
+					"id", "paciente_id", "contactologo_id", "fecha_hora", "duracion_minutos",
+					"tipo_servicio", "estado", "motivo", "observaciones", "recordatorio_enviado",
+					"created_at", "updated_at", "paciente_nombre", "paciente_email",
+					"contactologo_nombre", "contactologo_email",
+				}).AddRow(
+					1, 1, 2, time.Now(), 30,
+					"consulta", entities.EstadoPendiente, "", "", false,
+					time.Now(), time.Now(), "Patient 1", "patient1@example.com",
+					"Doctor 1", "doctor1@example.com",
+				)
+				mock.ExpectQuery(`SELECT (.+) FROM turnos t INNER JOIN`).WillReturnRows(rows)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, turnos, 1)
+			},
+		},
+		{
+			name: "success - filters by estado",
+			filter: &entities.TurnoFilter{
+				Estado: func() *entities.EstadoTurno { v := entities.EstadoPendiente; return &v }(),
+				Limit:  10,
+				Offset: 0,
+			},
+			behavior: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{
+					"id", "paciente_id", "contactologo_id", "fecha_hora", "duracion_minutos",
+					"tipo_servicio", "estado", "motivo", "observaciones", "recordatorio_enviado",
+					"created_at", "updated_at", "paciente_nombre", "paciente_email",
+					"contactologo_nombre", "contactologo_email",
+				}).AddRow(
+					1, 1, 2, time.Now(), 30,
+					"consulta", entities.EstadoPendiente, "", "", false,
+					time.Now(), time.Now(), "Patient 1", "patient1@example.com",
+					"Doctor 1", "doctor1@example.com",
+				)
+				mock.ExpectQuery(`SELECT (.+) FROM turnos t INNER JOIN`).WillReturnRows(rows)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, turnos, 1)
+			},
+		},
+		{
+			name: "success - filters by fecha range",
+			filter: &entities.TurnoFilter{
+				FechaDesde: func() *time.Time { v := time.Now().Add(-24 * time.Hour); return &v }(),
+				FechaHasta: func() *time.Time { v := time.Now().Add(24 * time.Hour); return &v }(),
+				Limit:      10,
+				Offset:     0,
+			},
+			behavior: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{
+					"id", "paciente_id", "contactologo_id", "fecha_hora", "duracion_minutos",
+					"tipo_servicio", "estado", "motivo", "observaciones", "recordatorio_enviado",
+					"created_at", "updated_at", "paciente_nombre", "paciente_email",
+					"contactologo_nombre", "contactologo_email",
+				}).AddRow(
+					1, 1, 2, time.Now(), 30,
+					"consulta", entities.EstadoPendiente, "", "", false,
+					time.Now(), time.Now(), "Patient 1", "patient1@example.com",
+					"Doctor 1", "doctor1@example.com",
+				)
+				mock.ExpectQuery(`SELECT (.+) FROM turnos t INNER JOIN`).WillReturnRows(rows)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, turnos, 1)
+			},
+		},
+		{
+			name: "error - database fails",
+			filter: &entities.TurnoFilter{
+				Limit:  10,
+				Offset: 0,
+			},
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`SELECT (.+) FROM turnos t INNER JOIN`).
+					WillReturnError(errors.New("database error"))
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turnos)
 			},
 		},
 	}
@@ -564,6 +792,19 @@ func TestTurnoRepository_GetBySemana(t *testing.T) {
 				assert.NotNil(t, turnos)
 			},
 		},
+		{
+			name:           "error - database fails",
+			fechaInicio:    time.Now(),
+			contactologoID: nil,
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`SELECT (.+) FROM turnos t INNER JOIN`).
+					WillReturnError(errors.New("database error"))
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turnos)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -617,6 +858,20 @@ func TestTurnoRepository_GetByProfesional(t *testing.T) {
 				assert.Len(t, turnos, 1)
 			},
 		},
+		{
+			name:           "error - database fails",
+			contactologoID: 2,
+			fechaDesde:     time.Now(),
+			fechaHasta:     time.Now().Add(7 * 24 * time.Hour),
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`SELECT (.+) FROM turnos t INNER JOIN`).
+					WillReturnError(errors.New("database error"))
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turnos)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -666,6 +921,18 @@ func TestTurnoRepository_GetProximosTurnos(t *testing.T) {
 				assert.Len(t, turnos, 1)
 			},
 		},
+		{
+			name:              "error - database fails",
+			horasAnticipacion: 24,
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`SELECT (.+) FROM turnos t INNER JOIN`).
+					WillReturnError(errors.New("database error"))
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turnos)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -713,6 +980,17 @@ func TestTurnoRepository_GetTurnosSinConfirmar(t *testing.T) {
 				assert.Len(t, turnos, 1)
 			},
 		},
+		{
+			name: "error - database fails",
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`SELECT (.+) FROM turnos t INNER JOIN`).
+					WillReturnError(errors.New("database error"))
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turnos)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -753,7 +1031,7 @@ func TestTurnoRepository_Count(t *testing.T) {
 			},
 		},
 		{
-			name: "success - counts with filter",
+			name: "success - counts with estado filter",
 			filter: &entities.TurnoFilter{
 				Estado: func() *entities.EstadoTurno { v := entities.EstadoPendiente; return &v }(),
 			},
@@ -764,6 +1042,75 @@ func TestTurnoRepository_Count(t *testing.T) {
 			asserts: func(t *testing.T, count int, err error) {
 				assert.NoError(t, err)
 				assert.Equal(t, 5, count)
+			},
+		},
+		{
+			name: "success - counts with paciente_id filter",
+			filter: &entities.TurnoFilter{
+				PacienteID: func() *int64 { v := int64(1); return &v }(),
+			},
+			behavior: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"count"}).AddRow(3)
+				mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(rows)
+			},
+			asserts: func(t *testing.T, count int, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, 3, count)
+			},
+		},
+		{
+			name: "success - counts with contactologo_id filter",
+			filter: &entities.TurnoFilter{
+				ContactologoID: func() *int64 { v := int64(2); return &v }(),
+			},
+			behavior: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"count"}).AddRow(8)
+				mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(rows)
+			},
+			asserts: func(t *testing.T, count int, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, 8, count)
+			},
+		},
+		{
+			name: "success - counts with tipo_servicio filter",
+			filter: &entities.TurnoFilter{
+				TipoServicio: func() *entities.TipoServicio { v := entities.TipoServicio("consulta"); return &v }(),
+			},
+			behavior: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"count"}).AddRow(12)
+				mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(rows)
+			},
+			asserts: func(t *testing.T, count int, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, 12, count)
+			},
+		},
+		{
+			name: "success - counts with fecha range filters",
+			filter: &entities.TurnoFilter{
+				FechaDesde: func() *time.Time { v := time.Now().Add(-24 * time.Hour); return &v }(),
+				FechaHasta: func() *time.Time { v := time.Now().Add(24 * time.Hour); return &v }(),
+			},
+			behavior: func(mock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"count"}).AddRow(6)
+				mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(rows)
+			},
+			asserts: func(t *testing.T, count int, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, 6, count)
+			},
+		},
+		{
+			name: "error - database fails",
+			filter: &entities.TurnoFilter{},
+			behavior: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`SELECT COUNT`).
+					WillReturnError(errors.New("database error"))
+			},
+			asserts: func(t *testing.T, count int, err error) {
+				assert.Error(t, err)
+				assert.Equal(t, 0, count)
 			},
 		},
 	}
