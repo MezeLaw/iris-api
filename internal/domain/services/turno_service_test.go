@@ -80,6 +80,22 @@ func TestTurnoService_CreateTurno(t *testing.T) {
 				assert.Contains(t, err.Error(), "disponible")
 			},
 		},
+		{
+			name: "error - CheckDisponibilidad fails",
+			req: &entities.CreateTurnoRequest{
+				PacienteID:      1,
+				ContactologoID:  2,
+				FechaHora:       futureTime,
+				DuracionMinutos: 30,
+			},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("CheckDisponibilidad", mock.Anything, int64(2), mock.Anything, 30, (*int64)(nil)).Return(false, errors.New("database error"))
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turno)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -185,6 +201,22 @@ func TestTurnoService_GetTurnos(t *testing.T) {
 				m.On("GetAll", mock.Anything, mock.Anything).Return([]*entities.TurnoConDetalles{
 					{Turno: entities.Turno{ID: 11}, PacienteNombre: "Patient 11"},
 				}, nil)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, turnos)
+			},
+		},
+		{
+			name: "success - fixes negative offset",
+			filter: &entities.TurnoFilter{
+				Limit:  10,
+				Offset: -5,
+			},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetAll", mock.Anything, mock.MatchedBy(func(f *entities.TurnoFilter) bool {
+					return f.Offset == 0
+				})).Return([]*entities.TurnoConDetalles{}, nil)
 			},
 			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
 				assert.NoError(t, err)
@@ -384,6 +416,17 @@ func TestTurnoService_GetProximosTurnosAlert(t *testing.T) {
 				assert.Nil(t, alert)
 			},
 		},
+		{
+			name: "error - GetTurnosSinConfirmar fails",
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetProximosTurnos", mock.Anything, 24).Return([]*entities.TurnoConDetalles{}, nil)
+				m.On("GetTurnosSinConfirmar", mock.Anything).Return(nil, errors.New("database error"))
+			},
+			asserts: func(t *testing.T, alert *entities.ProximosTurnosAlert, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, alert)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -525,6 +568,60 @@ func TestTurnoService_UpdateTurno_Success(t *testing.T) {
 			req:  &entities.UpdateTurnoRequest{},
 			behavior: func(m *MockTurnoRepository) {
 				m.On("GetByID", mock.Anything, int64(1)).Return(nil, errors.New("not found"))
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turno)
+			},
+		},
+		{
+			name: "success - updates all fields except fecha",
+			id:   1,
+			req: &entities.UpdateTurnoRequest{
+				DuracionMinutos: func() *int { v := 60; return &v }(),
+				TipoServicio:    func() *entities.TipoServicio { v := entities.TipoServicio("seguimiento"); return &v }(),
+				Estado:          func() *entities.EstadoTurno { v := entities.EstadoConfirmado; return &v }(),
+				Motivo:          func() *string { v := "Control"; return &v }(),
+				Observaciones:   func() *string { v := "Observación"; return &v }(),
+			},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.TurnoConDetalles{
+					Turno: entities.Turno{
+						ID:              1,
+						Estado:          entities.EstadoPendiente,
+						ContactologoID:  2,
+						DuracionMinutos: 30,
+						FechaHora:       time.Now().Add(24 * time.Hour),
+					},
+				}, nil)
+				m.On("Update", mock.Anything, int64(1), mock.Anything).Return(&entities.Turno{
+					ID:              1,
+					DuracionMinutos: 60,
+					Estado:          entities.EstadoConfirmado,
+				}, nil)
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, turno)
+			},
+		},
+		{
+			name: "error - CheckDisponibilidad fails",
+			id:   1,
+			req: &entities.UpdateTurnoRequest{
+				FechaHora: &futureTime,
+			},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.TurnoConDetalles{
+					Turno: entities.Turno{
+						ID:              1,
+						Estado:          entities.EstadoPendiente,
+						ContactologoID:  2,
+						DuracionMinutos: 30,
+						FechaHora:       time.Now().Add(24 * time.Hour),
+					},
+				}, nil)
+				m.On("CheckDisponibilidad", mock.Anything, int64(2), futureTime, 30, mock.AnythingOfType("*int64")).Return(false, errors.New("database error"))
 			},
 			asserts: func(t *testing.T, turno *entities.Turno, err error) {
 				assert.Error(t, err)
