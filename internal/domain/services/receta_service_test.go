@@ -328,6 +328,191 @@ func TestRecetaService_CheckDioptriasChange(t *testing.T) {
 	}
 }
 
+func TestRecetaService_GetRecetasByPacienteID(t *testing.T) {
+	tests := []struct {
+		name       string
+		pacienteID int64
+		limit      int
+		offset     int
+		behavior   func(m *MockRecetaRepo)
+		asserts    func(t *testing.T, recetas []*entities.Receta, total int, err error)
+	}{
+		{
+			name:       "success - returns recetas by paciente",
+			pacienteID: 1,
+			limit:      10,
+			offset:     0,
+			behavior: func(m *MockRecetaRepo) {
+				m.On("GetByPacienteID", mock.Anything, int64(1), 10, 0).Return([]*entities.Receta{
+					{ID: 1, PacienteID: 1},
+					{ID: 2, PacienteID: 1},
+				}, nil)
+				m.On("CountByPacienteID", mock.Anything, int64(1)).Return(2, nil)
+			},
+			asserts: func(t *testing.T, recetas []*entities.Receta, total int, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, recetas)
+				assert.Len(t, recetas, 2)
+				assert.Equal(t, 2, total)
+			},
+		},
+		{
+			name:       "error - invalid paciente id",
+			pacienteID: 0,
+			limit:      10,
+			offset:     0,
+			behavior:   func(m *MockRecetaRepo) {},
+			asserts: func(t *testing.T, recetas []*entities.Receta, total int, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, recetas)
+				assert.Contains(t, err.Error(), "invalid")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockRecetaRepo)
+			tt.behavior(mockRepo)
+
+			service := NewRecetaService(mockRepo)
+			recetas, total, err := service.GetRecetasByPacienteID(context.Background(), tt.pacienteID, tt.limit, tt.offset)
+
+			tt.asserts(t, recetas, total, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestRecetaService_GetHistorialByPacienteID(t *testing.T) {
+	tests := []struct {
+		name       string
+		pacienteID int64
+		behavior   func(m *MockRecetaRepo)
+		asserts    func(t *testing.T, recetas []*entities.Receta, err error)
+	}{
+		{
+			name:       "success - returns historial",
+			pacienteID: 1,
+			behavior: func(m *MockRecetaRepo) {
+				m.On("GetHistorialByPacienteID", mock.Anything, int64(1)).Return([]*entities.Receta{
+					{ID: 1, PacienteID: 1},
+					{ID: 2, PacienteID: 1},
+				}, nil)
+			},
+			asserts: func(t *testing.T, recetas []*entities.Receta, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, recetas, 2)
+			},
+		},
+		{
+			name:       "error - invalid paciente id",
+			pacienteID: 0,
+			behavior:   func(m *MockRecetaRepo) {},
+			asserts: func(t *testing.T, recetas []*entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, recetas)
+				assert.Contains(t, err.Error(), "invalid")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockRecetaRepo)
+			tt.behavior(mockRepo)
+
+			service := NewRecetaService(mockRepo)
+			recetas, err := service.GetHistorialByPacienteID(context.Background(), tt.pacienteID)
+
+			tt.asserts(t, recetas, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestRecetaService_UpdateReceta(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       int64
+		req      *entities.UpdateRecetaRequest
+		behavior func(m *MockRecetaRepo)
+		asserts  func(t *testing.T, receta *entities.Receta, err error)
+	}{
+		{
+			name: "success - updates receta",
+			id:   1,
+			req: &entities.UpdateRecetaRequest{
+				ODEsfera: func() *float64 { v := -3.0; return &v }(),
+			},
+			behavior: func(m *MockRecetaRepo) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.Receta{
+					ID:       1,
+					ODEsfera: -2.5,
+				}, nil)
+				m.On("Update", mock.Anything, int64(1), mock.Anything).Return(&entities.Receta{
+					ID:       1,
+					ODEsfera: -3.0,
+				}, nil)
+			},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, receta)
+			},
+		},
+		{
+			name: "error - invalid id",
+			id:   0,
+			req:  &entities.UpdateRecetaRequest{},
+			behavior: func(m *MockRecetaRepo) {},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, receta)
+				assert.Contains(t, err.Error(), "invalid")
+			},
+		},
+		{
+			name: "error - invalid od_esfera",
+			id:   1,
+			req: &entities.UpdateRecetaRequest{
+				ODEsfera: func() *float64 { v := -25.0; return &v }(),
+			},
+			behavior: func(m *MockRecetaRepo) {},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, receta)
+				assert.Contains(t, err.Error(), "od_esfera")
+			},
+		},
+		{
+			name: "error - invalid tipo_lente",
+			id:   1,
+			req: &entities.UpdateRecetaRequest{
+				TipoLente: func() *string { v := "invalid"; return &v }(),
+			},
+			behavior: func(m *MockRecetaRepo) {},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, receta)
+				assert.Contains(t, err.Error(), "tipo_lente")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockRecetaRepo)
+			tt.behavior(mockRepo)
+
+			service := NewRecetaService(mockRepo)
+			receta, err := service.UpdateReceta(context.Background(), tt.id, tt.req)
+
+			tt.asserts(t, receta, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
 func TestRecetaService_DeleteReceta(t *testing.T) {
 	tests := []struct {
 		name     string

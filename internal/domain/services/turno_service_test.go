@@ -400,6 +400,227 @@ func TestTurnoService_GetProximosTurnosAlert(t *testing.T) {
 	}
 }
 
+func TestTurnoService_UpdateTurno_Success(t *testing.T) {
+	futureTime := time.Now().Add(48 * time.Hour)
+	tests := []struct {
+		name     string
+		id       int64
+		req      *entities.UpdateTurnoRequest
+		behavior func(m *MockTurnoRepository)
+		asserts  func(t *testing.T, turno *entities.Turno, err error)
+	}{
+		{
+			name: "success - updates turno with new fecha",
+			id:   1,
+			req: &entities.UpdateTurnoRequest{
+				FechaHora: &futureTime,
+			},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.TurnoConDetalles{
+					Turno: entities.Turno{
+						ID:              1,
+						Estado:          entities.EstadoPendiente,
+						ContactologoID:  2,
+						DuracionMinutos: 30,
+						FechaHora:       time.Now().Add(24 * time.Hour),
+					},
+				}, nil)
+				m.On("CheckDisponibilidad", mock.Anything, int64(2), futureTime, 30, mock.AnythingOfType("*int64")).Return(true, nil)
+				m.On("Update", mock.Anything, int64(1), mock.Anything).Return(&entities.Turno{
+					ID:        1,
+					FechaHora: futureTime,
+				}, nil)
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, turno)
+			},
+		},
+		{
+			name: "error - turno already completed",
+			id:   1,
+			req:  &entities.UpdateTurnoRequest{},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.TurnoConDetalles{
+					Turno: entities.Turno{
+						ID:     1,
+						Estado: entities.EstadoCompletado,
+					},
+				}, nil)
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turno)
+				assert.Contains(t, err.Error(), "completado")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepository)
+			tt.behavior(mockRepo)
+
+			service := NewTurnoService(mockRepo)
+			turno, err := service.UpdateTurno(context.Background(), tt.id, tt.req)
+
+			tt.asserts(t, turno, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestTurnoService_GetTurnosByDia(t *testing.T) {
+	tests := []struct {
+		name           string
+		fecha          time.Time
+		contactologoID *int64
+		behavior       func(m *MockTurnoRepository)
+		asserts        func(t *testing.T, turnos []*entities.TurnoConDetalles, err error)
+	}{
+		{
+			name:  "success - returns turnos by dia",
+			fecha: time.Now(),
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetByDia", mock.Anything, mock.Anything, (*int64)(nil)).Return([]*entities.TurnoConDetalles{
+					{Turno: entities.Turno{ID: 1}},
+				}, nil)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, turnos, 1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepository)
+			tt.behavior(mockRepo)
+
+			service := NewTurnoService(mockRepo)
+			turnos, err := service.GetTurnosByDia(context.Background(), tt.fecha, tt.contactologoID)
+
+			tt.asserts(t, turnos, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestTurnoService_GetTurnosBySemana(t *testing.T) {
+	tests := []struct {
+		name           string
+		fechaInicio    time.Time
+		contactologoID *int64
+		behavior       func(m *MockTurnoRepository)
+		asserts        func(t *testing.T, turnos []*entities.TurnoConDetalles, err error)
+	}{
+		{
+			name:        "success - returns turnos by semana",
+			fechaInicio: time.Now(),
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetBySemana", mock.Anything, mock.Anything, (*int64)(nil)).Return([]*entities.TurnoConDetalles{
+					{Turno: entities.Turno{ID: 1}},
+				}, nil)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, turnos, 1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepository)
+			tt.behavior(mockRepo)
+
+			service := NewTurnoService(mockRepo)
+			turnos, err := service.GetTurnosBySemana(context.Background(), tt.fechaInicio, tt.contactologoID)
+
+			tt.asserts(t, turnos, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestTurnoService_GetTurnosByProfesional(t *testing.T) {
+	tests := []struct {
+		name           string
+		contactologoID int64
+		fechaDesde     time.Time
+		fechaHasta     time.Time
+		behavior       func(m *MockTurnoRepository)
+		asserts        func(t *testing.T, turnos []*entities.TurnoConDetalles, err error)
+	}{
+		{
+			name:           "success - returns turnos by profesional",
+			contactologoID: 1,
+			fechaDesde:     time.Now(),
+			fechaHasta:     time.Now().Add(7 * 24 * time.Hour),
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetByProfesional", mock.Anything, int64(1), mock.Anything, mock.Anything).Return([]*entities.TurnoConDetalles{
+					{Turno: entities.Turno{ID: 1}},
+				}, nil)
+			},
+			asserts: func(t *testing.T, turnos []*entities.TurnoConDetalles, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, turnos, 1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepository)
+			tt.behavior(mockRepo)
+
+			service := NewTurnoService(mockRepo)
+			turnos, err := service.GetTurnosByProfesional(context.Background(), tt.contactologoID, tt.fechaDesde, tt.fechaHasta)
+
+			tt.asserts(t, turnos, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestTurnoService_CountTurnos(t *testing.T) {
+	tests := []struct {
+		name     string
+		filter   *entities.TurnoFilter
+		behavior func(m *MockTurnoRepository)
+		asserts  func(t *testing.T, count int, err error)
+	}{
+		{
+			name: "success - counts turnos",
+			filter: &entities.TurnoFilter{
+				Limit:  10,
+				Offset: 0,
+			},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("Count", mock.Anything, mock.Anything).Return(5, nil)
+			},
+			asserts: func(t *testing.T, count int, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, 5, count)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockTurnoRepository)
+			tt.behavior(mockRepo)
+
+			service := NewTurnoService(mockRepo)
+			count, err := service.CountTurnos(context.Background(), tt.filter)
+
+			tt.asserts(t, count, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
 // MockTurnoRepository is a mock implementation of TurnoRepository
 type MockTurnoRepository struct {
 	mock.Mock
