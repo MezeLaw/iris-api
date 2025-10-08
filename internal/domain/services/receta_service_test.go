@@ -91,6 +91,54 @@ func TestRecetaService_CreateReceta(t *testing.T) {
 				assert.Contains(t, err.Error(), "tipo_lente")
 			},
 		},
+		{
+			name: "error - invalid oi_esfera range",
+			req: &entities.CreateRecetaRequest{
+				PacienteID: 1,
+				Fecha:      time.Now(),
+				ODEsfera:   -2.5,
+				OIEsfera:   25.0,
+				TipoLente:  "monofocal",
+			},
+			behavior: func(m *MockRecetaRepo) {},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, receta)
+				assert.Contains(t, err.Error(), "oi_esfera")
+			},
+		},
+		{
+			name: "error - empty fecha",
+			req: &entities.CreateRecetaRequest{
+				PacienteID: 1,
+				Fecha:      time.Time{},
+				ODEsfera:   -2.5,
+				OIEsfera:   -3.0,
+				TipoLente:  "monofocal",
+			},
+			behavior: func(m *MockRecetaRepo) {},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, receta)
+				assert.Contains(t, err.Error(), "fecha")
+			},
+		},
+		{
+			name: "error - empty tipo_lente",
+			req: &entities.CreateRecetaRequest{
+				PacienteID: 1,
+				Fecha:      time.Now(),
+				ODEsfera:   -2.5,
+				OIEsfera:   -3.0,
+				TipoLente:  "",
+			},
+			behavior: func(m *MockRecetaRepo) {},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, receta)
+				assert.Contains(t, err.Error(), "tipo_lente")
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -368,6 +416,33 @@ func TestRecetaService_GetRecetasByPacienteID(t *testing.T) {
 				assert.Contains(t, err.Error(), "invalid")
 			},
 		},
+		{
+			name:       "error - repo GetByPacienteID fails",
+			pacienteID: 1,
+			limit:      10,
+			offset:     0,
+			behavior: func(m *MockRecetaRepo) {
+				m.On("GetByPacienteID", mock.Anything, int64(1), 10, 0).Return(nil, errors.New("database error"))
+			},
+			asserts: func(t *testing.T, recetas []*entities.Receta, total int, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, recetas)
+			},
+		},
+		{
+			name:       "error - repo CountByPacienteID fails",
+			pacienteID: 1,
+			limit:      10,
+			offset:     0,
+			behavior: func(m *MockRecetaRepo) {
+				m.On("GetByPacienteID", mock.Anything, int64(1), 10, 0).Return([]*entities.Receta{}, nil)
+				m.On("CountByPacienteID", mock.Anything, int64(1)).Return(0, errors.New("database error"))
+			},
+			asserts: func(t *testing.T, recetas []*entities.Receta, total int, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, recetas)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -461,6 +536,35 @@ func TestRecetaService_UpdateReceta(t *testing.T) {
 			},
 		},
 		{
+			name: "success - updates all fields",
+			id:   1,
+			req: &entities.UpdateRecetaRequest{
+				Fecha:         func() *time.Time { v := time.Now(); return &v }(),
+				ODEsfera:      func() *float64 { v := -3.0; return &v }(),
+				ODCilindro:    func() *float64 { v := -1.0; return &v }(),
+				ODEje:         func() *int { v := 90; return &v }(),
+				OIEsfera:      func() *float64 { v := -2.5; return &v }(),
+				OICilindro:    func() *float64 { v := -0.5; return &v }(),
+				OIEje:         func() *int { v := 180; return &v }(),
+				TipoLente:     func() *string { v := "bifocal"; return &v }(),
+				Observaciones: func() *string { v := "Updated"; return &v }(),
+			},
+			behavior: func(m *MockRecetaRepo) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.Receta{
+					ID:       1,
+					ODEsfera: -2.5,
+				}, nil)
+				m.On("Update", mock.Anything, int64(1), mock.Anything).Return(&entities.Receta{
+					ID:       1,
+					ODEsfera: -3.0,
+				}, nil)
+			},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, receta)
+			},
+		},
+		{
 			name: "error - invalid id",
 			id:   0,
 			req:  &entities.UpdateRecetaRequest{},
@@ -495,6 +599,49 @@ func TestRecetaService_UpdateReceta(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, receta)
 				assert.Contains(t, err.Error(), "tipo_lente")
+			},
+		},
+		{
+			name: "error - invalid oi_esfera",
+			id:   1,
+			req: &entities.UpdateRecetaRequest{
+				OIEsfera: func() *float64 { v := 25.0; return &v }(),
+			},
+			behavior: func(m *MockRecetaRepo) {},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, receta)
+				assert.Contains(t, err.Error(), "oi_esfera")
+			},
+		},
+		{
+			name: "error - receta not found",
+			id:   1,
+			req:  &entities.UpdateRecetaRequest{},
+			behavior: func(m *MockRecetaRepo) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(nil, errors.New("not found"))
+			},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, receta)
+			},
+		},
+		{
+			name: "error - update fails",
+			id:   1,
+			req: &entities.UpdateRecetaRequest{
+				ODEsfera: func() *float64 { v := -3.0; return &v }(),
+			},
+			behavior: func(m *MockRecetaRepo) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.Receta{
+					ID:       1,
+					ODEsfera: -2.5,
+				}, nil)
+				m.On("Update", mock.Anything, int64(1), mock.Anything).Return(nil, errors.New("update failed"))
+			},
+			asserts: func(t *testing.T, receta *entities.Receta, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, receta)
 			},
 		},
 	}

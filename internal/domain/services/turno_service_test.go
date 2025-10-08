@@ -454,6 +454,83 @@ func TestTurnoService_UpdateTurno_Success(t *testing.T) {
 				assert.Contains(t, err.Error(), "completado")
 			},
 		},
+		{
+			name: "error - turno already canceled",
+			id:   1,
+			req:  &entities.UpdateTurnoRequest{},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.TurnoConDetalles{
+					Turno: entities.Turno{
+						ID:     1,
+						Estado: entities.EstadoCancelado,
+					},
+				}, nil)
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turno)
+				assert.Contains(t, err.Error(), "cancelado")
+			},
+		},
+		{
+			name: "error - fecha in the past",
+			id:   1,
+			req: &entities.UpdateTurnoRequest{
+				FechaHora: func() *time.Time { v := time.Now().Add(-24 * time.Hour); return &v }(),
+			},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.TurnoConDetalles{
+					Turno: entities.Turno{
+						ID:              1,
+						Estado:          entities.EstadoPendiente,
+						ContactologoID:  2,
+						DuracionMinutos: 30,
+						FechaHora:       time.Now().Add(24 * time.Hour),
+					},
+				}, nil)
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turno)
+				assert.Contains(t, err.Error(), "pasado")
+			},
+		},
+		{
+			name: "error - profesional not available",
+			id:   1,
+			req: &entities.UpdateTurnoRequest{
+				FechaHora: &futureTime,
+			},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.TurnoConDetalles{
+					Turno: entities.Turno{
+						ID:              1,
+						Estado:          entities.EstadoPendiente,
+						ContactologoID:  2,
+						DuracionMinutos: 30,
+						FechaHora:       time.Now().Add(24 * time.Hour),
+					},
+				}, nil)
+				m.On("CheckDisponibilidad", mock.Anything, int64(2), futureTime, 30, mock.AnythingOfType("*int64")).Return(false, nil)
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turno)
+				assert.Contains(t, err.Error(), "disponible")
+			},
+		},
+		{
+			name: "error - GetByID fails",
+			id:   1,
+			req:  &entities.UpdateTurnoRequest{},
+			behavior: func(m *MockTurnoRepository) {
+				m.On("GetByID", mock.Anything, int64(1)).Return(nil, errors.New("not found"))
+			},
+			asserts: func(t *testing.T, turno *entities.Turno, err error) {
+				assert.Error(t, err)
+				assert.Nil(t, turno)
+			},
+		},
 	}
 
 	for _, tt := range tests {
