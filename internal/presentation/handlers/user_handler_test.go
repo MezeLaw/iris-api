@@ -205,6 +205,54 @@ func TestUserHandler_GetUsers(t *testing.T) {
 			},
 		},
 		{
+			name:  "success - limit zero uses default",
+			query: "?limit=0",
+			behavior: func(m *MockUserUseCase) {
+				m.On("GetUsers", mock.Anything, 10, 0).Return(&usecases.GetUsersResponse{
+					Users:   []*entities.User{},
+					Total:   0,
+					Limit:   10,
+					Offset:  0,
+					HasMore: false,
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+			},
+		},
+		{
+			name:  "success - negative limit uses default",
+			query: "?limit=-5",
+			behavior: func(m *MockUserUseCase) {
+				m.On("GetUsers", mock.Anything, 10, 0).Return(&usecases.GetUsersResponse{
+					Users:   []*entities.User{},
+					Total:   0,
+					Limit:   10,
+					Offset:  0,
+					HasMore: false,
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+			},
+		},
+		{
+			name:  "success - negative offset uses default",
+			query: "?offset=-10",
+			behavior: func(m *MockUserUseCase) {
+				m.On("GetUsers", mock.Anything, 10, 0).Return(&usecases.GetUsersResponse{
+					Users:   []*entities.User{},
+					Total:   0,
+					Limit:   10,
+					Offset:  0,
+					HasMore: false,
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+			},
+		},
+		{
 			name:  "error - usecase fails",
 			query: "",
 			behavior: func(m *MockUserUseCase) {
@@ -276,6 +324,19 @@ func TestUserHandler_UpdateUser(t *testing.T) {
 			userID:   "1",
 			body:     "invalid",
 			behavior: func(m *MockUserUseCase) {},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, resp.Code)
+			},
+		},
+		{
+			name:   "error - user not found",
+			userID: "999",
+			body: map[string]interface{}{
+				"name": "Updated Name",
+			},
+			behavior: func(m *MockUserUseCase) {
+				m.On("UpdateUser", mock.Anything, 999, mock.Anything).Return(nil, errors.New("user not found"))
+			},
 			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				assert.Equal(t, http.StatusBadRequest, resp.Code)
 			},

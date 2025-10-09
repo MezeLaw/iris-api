@@ -205,6 +205,34 @@ func TestRecetaHandler_GetRecetas(t *testing.T) {
 			},
 		},
 		{
+			name:  "success - invalid limit uses default",
+			query: "?limit=invalid",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("GetRecetas", mock.Anything, 10, 0).Return(&usecases.GetRecetasResponse{
+					Recetas: []*entities.Receta{},
+					Total:   0,
+					HasMore: false,
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+			},
+		},
+		{
+			name:  "success - negative offset uses default",
+			query: "?offset=-5",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("GetRecetas", mock.Anything, 10, 0).Return(&usecases.GetRecetasResponse{
+					Recetas: []*entities.Receta{},
+					Total:   0,
+					HasMore: false,
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+			},
+		},
+		{
 			name:  "error - usecase fails",
 			query: "",
 			behavior: func(m *MockRecetaUseCase) {
@@ -328,6 +356,16 @@ func TestRecetaHandler_CheckDioptriasChange(t *testing.T) {
 				assert.Equal(t, http.StatusBadRequest, resp.Code)
 			},
 		},
+		{
+			name:       "error - usecase fails",
+			pacienteID: "1",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("CheckDioptriasChange", mock.Anything, int64(1)).Return(nil, errors.New("database error"))
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusInternalServerError, resp.Code)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -341,6 +379,304 @@ func TestRecetaHandler_CheckDioptriasChange(t *testing.T) {
 			router.GET("/recetas/paciente/:paciente_id/check-change", handler.CheckDioptriasChange)
 
 			req := httptest.NewRequest(http.MethodGet, "/recetas/paciente/"+tt.pacienteID+"/check-change", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			tt.asserts(t, resp)
+			mockUseCase.AssertExpectations(t)
+		})
+	}
+}
+
+func TestRecetaHandler_GetRecetasByPacienteID(t *testing.T) {
+	tests := []struct {
+		name       string
+		pacienteID string
+		query      string
+		behavior   func(m *MockRecetaUseCase)
+		asserts    func(t *testing.T, resp *httptest.ResponseRecorder)
+	}{
+		{
+			name:       "success - gets recetas with default pagination",
+			pacienteID: "1",
+			query:      "",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("GetRecetasByPacienteID", mock.Anything, int64(1), 10, 0).Return(&usecases.GetRecetasResponse{
+					Recetas: []*entities.Receta{{ID: 1, PacienteID: 1}},
+					Total:   1,
+					HasMore: false,
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+				var response map[string]interface{}
+				json.Unmarshal(resp.Body.Bytes(), &response)
+				assert.Equal(t, "Recetas retrieved successfully", response["message"])
+			},
+		},
+		{
+			name:       "success - gets recetas with custom pagination",
+			pacienteID: "1",
+			query:      "?limit=20&offset=10",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("GetRecetasByPacienteID", mock.Anything, int64(1), 20, 10).Return(&usecases.GetRecetasResponse{
+					Recetas: []*entities.Receta{},
+					Total:   0,
+					HasMore: false,
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+			},
+		},
+		{
+			name:       "success - invalid limit uses default",
+			pacienteID: "1",
+			query:      "?limit=abc",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("GetRecetasByPacienteID", mock.Anything, int64(1), 10, 0).Return(&usecases.GetRecetasResponse{
+					Recetas: []*entities.Receta{},
+					Total:   0,
+					HasMore: false,
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+			},
+		},
+		{
+			name:       "error - invalid paciente id",
+			pacienteID: "invalid",
+			query:      "",
+			behavior:   func(m *MockRecetaUseCase) {},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, resp.Code)
+				var response map[string]interface{}
+				json.Unmarshal(resp.Body.Bytes(), &response)
+				assert.Contains(t, response["error"], "Invalid paciente ID")
+			},
+		},
+		{
+			name:       "success - paciente without recetas",
+			pacienteID: "999",
+			query:      "",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("GetRecetasByPacienteID", mock.Anything, int64(999), 10, 0).Return(&usecases.GetRecetasResponse{
+					Recetas: []*entities.Receta{},
+					Total:   0,
+					HasMore: false,
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+			},
+		},
+		{
+			name:       "error - usecase fails",
+			pacienteID: "1",
+			query:      "",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("GetRecetasByPacienteID", mock.Anything, int64(1), 10, 0).Return(nil, errors.New("database error"))
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusInternalServerError, resp.Code)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockUseCase := new(MockRecetaUseCase)
+			tt.behavior(mockUseCase)
+
+			handler := NewRecetaHandler(mockUseCase)
+
+			router := gin.New()
+			router.GET("/recetas/paciente/:paciente_id", handler.GetRecetasByPacienteID)
+
+			req := httptest.NewRequest(http.MethodGet, "/recetas/paciente/"+tt.pacienteID+tt.query, nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			tt.asserts(t, resp)
+			mockUseCase.AssertExpectations(t)
+		})
+	}
+}
+
+func TestRecetaHandler_GetHistorialByPacienteID(t *testing.T) {
+	tests := []struct {
+		name       string
+		pacienteID string
+		behavior   func(m *MockRecetaUseCase)
+		asserts    func(t *testing.T, resp *httptest.ResponseRecorder)
+	}{
+		{
+			name:       "success - gets historial completo",
+			pacienteID: "1",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("GetHistorialByPacienteID", mock.Anything, int64(1)).Return([]*entities.Receta{
+					{ID: 1, PacienteID: 1, ODEsfera: -2.5},
+					{ID: 2, PacienteID: 1, ODEsfera: -3.0},
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+				var response map[string]interface{}
+				json.Unmarshal(resp.Body.Bytes(), &response)
+				assert.Equal(t, "Historial retrieved successfully", response["message"])
+			},
+		},
+		{
+			name:       "error - invalid paciente id",
+			pacienteID: "invalid",
+			behavior:   func(m *MockRecetaUseCase) {},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, resp.Code)
+				var response map[string]interface{}
+				json.Unmarshal(resp.Body.Bytes(), &response)
+				assert.Contains(t, response["error"], "Invalid paciente ID")
+			},
+		},
+		{
+			name:       "success - paciente without historial",
+			pacienteID: "999",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("GetHistorialByPacienteID", mock.Anything, int64(999)).Return([]*entities.Receta{}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+			},
+		},
+		{
+			name:       "error - usecase fails",
+			pacienteID: "1",
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("GetHistorialByPacienteID", mock.Anything, int64(1)).Return(nil, errors.New("database error"))
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusInternalServerError, resp.Code)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockUseCase := new(MockRecetaUseCase)
+			tt.behavior(mockUseCase)
+
+			handler := NewRecetaHandler(mockUseCase)
+
+			router := gin.New()
+			router.GET("/recetas/paciente/:paciente_id/historial", handler.GetHistorialByPacienteID)
+
+			req := httptest.NewRequest(http.MethodGet, "/recetas/paciente/"+tt.pacienteID+"/historial", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			tt.asserts(t, resp)
+			mockUseCase.AssertExpectations(t)
+		})
+	}
+}
+
+func TestRecetaHandler_UpdateReceta(t *testing.T) {
+	tests := []struct {
+		name     string
+		recetaID string
+		body     interface{}
+		behavior func(m *MockRecetaUseCase)
+		asserts  func(t *testing.T, resp *httptest.ResponseRecorder)
+	}{
+		{
+			name:     "success - updates receta",
+			recetaID: "1",
+			body: map[string]interface{}{
+				"od_esfera": -3.0,
+				"oi_esfera": -3.5,
+			},
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("UpdateReceta", mock.Anything, int64(1), mock.Anything).Return(&entities.Receta{
+					ID:       1,
+					ODEsfera: -3.0,
+					OIEsfera: -3.5,
+				}, nil)
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, resp.Code)
+				var response map[string]interface{}
+				json.Unmarshal(resp.Body.Bytes(), &response)
+				assert.Equal(t, "Receta updated successfully", response["message"])
+			},
+		},
+		{
+			name:     "error - invalid receta id",
+			recetaID: "invalid",
+			body:     map[string]interface{}{},
+			behavior: func(m *MockRecetaUseCase) {},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, resp.Code)
+				var response map[string]interface{}
+				json.Unmarshal(resp.Body.Bytes(), &response)
+				assert.Contains(t, response["error"], "Invalid receta ID")
+			},
+		},
+		{
+			name:     "error - invalid request body",
+			recetaID: "1",
+			body:     "invalid json",
+			behavior: func(m *MockRecetaUseCase) {},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, resp.Code)
+				var response map[string]interface{}
+				json.Unmarshal(resp.Body.Bytes(), &response)
+				assert.Contains(t, response["error"], "Invalid request body")
+			},
+		},
+		{
+			name:     "error - receta not found",
+			recetaID: "999",
+			body: map[string]interface{}{
+				"od_esfera": -3.0,
+			},
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("UpdateReceta", mock.Anything, int64(999), mock.Anything).Return(nil, errors.New("receta not found"))
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, resp.Code)
+			},
+		},
+		{
+			name:     "error - usecase validation fails",
+			recetaID: "1",
+			body: map[string]interface{}{
+				"od_esfera": 100.0, // invalid value
+			},
+			behavior: func(m *MockRecetaUseCase) {
+				m.On("UpdateReceta", mock.Anything, int64(1), mock.Anything).Return(nil, errors.New("validation error: invalid diopter value"))
+			},
+			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, resp.Code)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockUseCase := new(MockRecetaUseCase)
+			tt.behavior(mockUseCase)
+
+			handler := NewRecetaHandler(mockUseCase)
+
+			router := gin.New()
+			router.PUT("/recetas/:id", handler.UpdateReceta)
+
+			bodyBytes, _ := json.Marshal(tt.body)
+			req := httptest.NewRequest(http.MethodPut, "/recetas/"+tt.recetaID, bytes.NewBuffer(bodyBytes))
+			req.Header.Set("Content-Type", "application/json")
 			resp := httptest.NewRecorder()
 
 			router.ServeHTTP(resp, req)
