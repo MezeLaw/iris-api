@@ -61,6 +61,15 @@ func main() {
 	reporteriaUseCase := usecases.NewReporteriaUseCase(reporteriaService)
 	reporteriaHandler := handlers.NewReporteriaHandler(reporteriaUseCase)
 
+	// Pacientes setup
+	pacienteRepo := repositories.NewPacienteRepository(db.GetDB())
+	antecedentesMedicosRepo := repositories.NewAntecedentesMedicosRepository(db.GetDB())
+	antecedentesVisualesRepo := repositories.NewAntecedentesVisualesRepository(db.GetDB())
+	examenVisualRepo := repositories.NewExamenVisualRepository(db.GetDB())
+	pacienteService := services.NewPacienteService(pacienteRepo, antecedentesMedicosRepo, antecedentesVisualesRepo, examenVisualRepo)
+	pacienteUseCase := usecases.NewPacienteUseCase(pacienteService)
+	pacienteHandler := handlers.NewPacienteHandler(pacienteUseCase)
+
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 
@@ -89,6 +98,7 @@ func main() {
 	routes.SetupRecetaRoutes(router, recetaHandler)
 	routes.SetupTurnoRoutes(router, turnoHandler)
 	routes.SetupReporteriaRoutes(router, reporteriaHandler, authMiddleware)
+	routes.SetupPacienteRoutes(router, pacienteHandler, authMiddleware)
 
 	serverAddr := cfg.Server.Host + ":" + cfg.Server.Port
 	log.Printf("Starting server on %s", serverAddr)

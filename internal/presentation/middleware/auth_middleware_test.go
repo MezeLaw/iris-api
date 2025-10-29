@@ -23,15 +23,15 @@ func init() {
 
 func TestAuthMiddleware_RequireAuth(t *testing.T) {
 	tests := []struct {
-		name            string
-		authHeader      string
-		behavior        func()
-		asserts         func(t *testing.T, resp *httptest.ResponseRecorder, contextCalled bool)
+		name       string
+		authHeader string
+		behavior   func()
+		asserts    func(t *testing.T, resp *httptest.ResponseRecorder, contextCalled bool)
 	}{
 		{
 			name:       "success - valid token",
 			authHeader: "Bearer valid.token.here",
-			behavior: func() {},
+			behavior:   func() {},
 			asserts: func(t *testing.T, resp *httptest.ResponseRecorder, contextCalled bool) {
 				assert.Equal(t, http.StatusOK, resp.Code)
 				assert.True(t, contextCalled)
@@ -67,7 +67,7 @@ func TestAuthMiddleware_RequireAuth(t *testing.T) {
 		{
 			name:       "error - invalid token",
 			authHeader: "Bearer invalid.token",
-			behavior: func() {},
+			behavior:   func() {},
 			asserts: func(t *testing.T, resp *httptest.ResponseRecorder, contextCalled bool) {
 				assert.Equal(t, http.StatusUnauthorized, resp.Code)
 				assert.False(t, contextCalled)
@@ -76,7 +76,7 @@ func TestAuthMiddleware_RequireAuth(t *testing.T) {
 		{
 			name:       "error - expired token",
 			authHeader: "Bearer expired.token",
-			behavior: func() {},
+			behavior:   func() {},
 			asserts: func(t *testing.T, resp *httptest.ResponseRecorder, contextCalled bool) {
 				assert.Equal(t, http.StatusUnauthorized, resp.Code)
 				assert.False(t, contextCalled)
@@ -131,11 +131,11 @@ func TestAuthMiddleware_RequireAuth(t *testing.T) {
 
 func TestAuthMiddleware_RequireRole(t *testing.T) {
 	tests := []struct {
-		name           string
-		userClaims     *entities.TokenClaims
-		requiredRoles  []entities.UserRole
-		behavior       func()
-		asserts        func(t *testing.T, resp *httptest.ResponseRecorder, handlerCalled bool)
+		name          string
+		userClaims    *entities.TokenClaims
+		requiredRoles []entities.UserRole
+		behavior      func()
+		asserts       func(t *testing.T, resp *httptest.ResponseRecorder, handlerCalled bool)
 	}{
 		{
 			name: "success - user has required role (admin)",

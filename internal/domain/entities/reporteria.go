@@ -12,11 +12,11 @@ type PacienteActivo struct {
 }
 
 type PacienteInactivo struct {
-	ID          int64     `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	Email       string    `json:"email" db:"email"`
-	UltimoTurno time.Time `json:"ultimo_turno" db:"ultimo_turno"`
-	DiasInactivo int      `json:"dias_inactivo" db:"dias_inactivo"`
+	ID           int64     `json:"id" db:"id"`
+	Name         string    `json:"name" db:"name"`
+	Email        string    `json:"email" db:"email"`
+	UltimoTurno  time.Time `json:"ultimo_turno" db:"ultimo_turno"`
+	DiasInactivo int       `json:"dias_inactivo" db:"dias_inactivo"`
 }
 
 type ReportePacientesActivos struct {

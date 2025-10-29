@@ -51,8 +51,8 @@ func TestRecetaHandler_CreateReceta(t *testing.T) {
 			},
 		},
 		{
-			name: "error - invalid request body",
-			body: "invalid json",
+			name:     "error - invalid request body",
+			body:     "invalid json",
 			behavior: func(m *MockRecetaUseCase) {},
 			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				assert.Equal(t, http.StatusBadRequest, resp.Code)
@@ -103,10 +103,10 @@ func TestRecetaHandler_CreateReceta(t *testing.T) {
 
 func TestRecetaHandler_GetRecetaByID(t *testing.T) {
 	tests := []struct {
-		name      string
-		recetaID  string
-		behavior  func(m *MockRecetaUseCase)
-		asserts   func(t *testing.T, resp *httptest.ResponseRecorder)
+		name     string
+		recetaID string
+		behavior func(m *MockRecetaUseCase)
+		asserts  func(t *testing.T, resp *httptest.ResponseRecorder)
 	}{
 		{
 			name:     "success - gets receta by id",
@@ -325,10 +325,10 @@ func TestRecetaHandler_DeleteReceta(t *testing.T) {
 
 func TestRecetaHandler_CheckDioptriasChange(t *testing.T) {
 	tests := []struct {
-		name        string
-		pacienteID  string
-		behavior    func(m *MockRecetaUseCase)
-		asserts     func(t *testing.T, resp *httptest.ResponseRecorder)
+		name       string
+		pacienteID string
+		behavior   func(m *MockRecetaUseCase)
+		asserts    func(t *testing.T, resp *httptest.ResponseRecorder)
 	}{
 		{
 			name:       "success - checks dioptrías change",

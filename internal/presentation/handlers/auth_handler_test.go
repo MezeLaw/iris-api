@@ -53,8 +53,8 @@ func TestAuthHandler_Register(t *testing.T) {
 			},
 		},
 		{
-			name: "error - invalid request body",
-			body: "invalid json",
+			name:     "error - invalid request body",
+			body:     "invalid json",
 			behavior: func(m *MockAuthUseCase) {},
 			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				assert.Equal(t, http.StatusBadRequest, resp.Code)
@@ -143,8 +143,8 @@ func TestAuthHandler_Login(t *testing.T) {
 			},
 		},
 		{
-			name: "error - invalid request body",
-			body: "invalid json",
+			name:     "error - invalid request body",
+			body:     "invalid json",
 			behavior: func(m *MockAuthUseCase) {},
 			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				assert.Equal(t, http.StatusBadRequest, resp.Code)

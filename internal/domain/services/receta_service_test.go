@@ -565,9 +565,9 @@ func TestRecetaService_UpdateReceta(t *testing.T) {
 			},
 		},
 		{
-			name: "error - invalid id",
-			id:   0,
-			req:  &entities.UpdateRecetaRequest{},
+			name:     "error - invalid id",
+			id:       0,
+			req:      &entities.UpdateRecetaRequest{},
 			behavior: func(m *MockRecetaRepo) {},
 			asserts: func(t *testing.T, receta *entities.Receta, err error) {
 				assert.Error(t, err)
