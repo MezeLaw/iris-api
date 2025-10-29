@@ -220,8 +220,8 @@ func TestTurnoUseCase_UpdateTurno(t *testing.T) {
 			behavior: func(m *MockTurnoRepo) {
 				m.On("GetByID", mock.Anything, int64(1)).Return(&entities.TurnoConDetalles{
 					Turno: entities.Turno{
-						ID:     1,
-						Estado: entities.EstadoPendiente,
+						ID:        1,
+						Estado:    entities.EstadoPendiente,
 						FechaHora: time.Now().Add(24 * time.Hour),
 					},
 				}, nil)

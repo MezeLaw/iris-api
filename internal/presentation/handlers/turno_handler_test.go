@@ -49,8 +49,8 @@ func TestTurnoHandler_CreateTurno(t *testing.T) {
 			},
 		},
 		{
-			name: "error - invalid request body",
-			body: "invalid json",
+			name:     "error - invalid request body",
+			body:     "invalid json",
 			behavior: func(m *MockTurnoUseCase) {},
 			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				assert.Equal(t, http.StatusBadRequest, resp.Code)
@@ -346,9 +346,9 @@ func TestTurnoHandler_CancelTurno(t *testing.T) {
 			},
 		},
 		{
-			name:    "error - invalid request body",
-			turnoID: "1",
-			body:    "invalid json",
+			name:     "error - invalid request body",
+			turnoID:  "1",
+			body:     "invalid json",
 			behavior: func(m *MockTurnoUseCase) {},
 			asserts: func(t *testing.T, resp *httptest.ResponseRecorder) {
 				assert.Equal(t, http.StatusBadRequest, resp.Code)

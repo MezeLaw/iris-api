@@ -894,10 +894,10 @@ func TestTurnoRepository_GetByProfesional(t *testing.T) {
 
 func TestTurnoRepository_GetProximosTurnos(t *testing.T) {
 	tests := []struct {
-		name                string
-		horasAnticipacion   int
-		behavior            func(mock sqlmock.Sqlmock)
-		asserts             func(t *testing.T, turnos []*entities.TurnoConDetalles, err error)
+		name              string
+		horasAnticipacion int
+		behavior          func(mock sqlmock.Sqlmock)
+		asserts           func(t *testing.T, turnos []*entities.TurnoConDetalles, err error)
 	}{
 		{
 			name:              "success - gets upcoming turnos",
@@ -1019,7 +1019,7 @@ func TestTurnoRepository_Count(t *testing.T) {
 		asserts  func(t *testing.T, count int, err error)
 	}{
 		{
-			name: "success - counts all turnos",
+			name:   "success - counts all turnos",
 			filter: &entities.TurnoFilter{},
 			behavior: func(mock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{"count"}).AddRow(10)
@@ -1102,7 +1102,7 @@ func TestTurnoRepository_Count(t *testing.T) {
 			},
 		},
 		{
-			name: "error - database fails",
+			name:   "error - database fails",
 			filter: &entities.TurnoFilter{},
 			behavior: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery(`SELECT COUNT`).

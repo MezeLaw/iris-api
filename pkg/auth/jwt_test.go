@@ -94,11 +94,11 @@ func TestJWTManager_ValidateToken(t *testing.T) {
 	differentSecretToken, _, _ := differentSecretManager.GenerateToken(validUser)
 
 	tests := []struct {
-		name        string
-		token       string
-		useManager  JWTManager
-		behavior    func()
-		asserts     func(t *testing.T, claims *Claims, err error)
+		name       string
+		token      string
+		useManager JWTManager
+		behavior   func()
+		asserts    func(t *testing.T, claims *Claims, err error)
 	}{
 		{
 			name:       "success - validates valid token",
