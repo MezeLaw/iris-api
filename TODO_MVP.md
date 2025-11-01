@@ -24,46 +24,26 @@
 - [x] Pacientes activos (con citas en últimos 60 días)
 - [x] Pacientes inactivos (sin citas en 60+ días)
 
+### 4. Módulo de Turnos/Agenda ✅ (PR #12 - Merged)
+- [x] Migración 008: Tabla turnos con soft delete
+- [x] Entity: Turno con multi-tenancy
+- [x] Repository: TurnoRepository con queries optimizadas
+- [x] Service: TurnoService con validación de disponibilidad
+- [x] UseCase: TurnoUseCase con paginación
+- [x] Handler: TurnoHandler con 10 endpoints protegidos
+- [x] Routes: `/api/v1/turnos/*` con JWT authentication
+- [x] CRUD completo (crear, listar, obtener, actualizar, eliminar)
+- [x] Cambio de estado (PATCH /api/v1/turnos/:id/estado)
+- [x] Verificación de disponibilidad (POST /api/v1/turnos/disponibilidad)
+- [x] Vistas por día, semana y profesional
+- [x] Validación de solapamiento de turnos
+- [x] Cálculo automático de hora_fin
+- [x] Soft delete
+- [x] Multi-tenant
+
 ---
 
-## 🚧 Módulos Pendientes del MVP
-
-### 4. Módulo de Turnos/Agenda ⏳ (PRÓXIMO)
-**Prioridad: ALTA - Core del MVP**
-
-#### Base de Datos
-- [ ] Migración para tabla `turnos`
-  - Campos: id, paciente_id, profesional_user_id, tipo_servicio, fecha_hora, duracion_minutos, estado, observaciones
-  - Estados: pendiente, confirmado, cancelado, completado, no_asistio
-  - Relación con pacientes y users (profesionales)
-  - Índices por fecha, paciente, profesional
-
-#### Backend
-- [ ] Entity: Turno
-- [ ] Repository: TurnoRepository (CRUD, filtros por fecha/profesional/paciente)
-- [ ] Service: TurnoService (validación de horarios, disponibilidad)
-- [ ] UseCase: TurnoUseCase
-- [ ] Handler: TurnoHandler
-- [ ] Routes: `/api/v1/turnos/*`
-
-#### Endpoints Necesarios
-- [ ] `POST /api/v1/turnos` - Crear turno
-- [ ] `GET /api/v1/turnos` - Listar turnos (con filtros: fecha_desde, fecha_hasta, profesional_id, paciente_id, estado)
-- [ ] `GET /api/v1/turnos/:id` - Obtener turno por ID
-- [ ] `PUT /api/v1/turnos/:id` - Actualizar turno
-- [ ] `DELETE /api/v1/turnos/:id` - Cancelar turno
-- [ ] `PATCH /api/v1/turnos/:id/estado` - Cambiar estado (confirmar, marcar no asistió, completar)
-- [ ] `GET /api/v1/turnos/disponibilidad` - Verificar disponibilidad de horarios
-- [ ] `GET /api/v1/turnos/por-dia/:fecha` - Vista por día
-- [ ] `GET /api/v1/turnos/por-semana/:fecha_inicio` - Vista por semana
-- [ ] `GET /api/v1/turnos/por-profesional/:user_id` - Turnos de un profesional
-
-#### Reglas de Negocio
-- [ ] Validar que no haya solapamiento de turnos para un mismo profesional
-- [ ] Calcular hora_fin automáticamente (hora_inicio + duracion_minutos)
-- [ ] Solo admin y optometrista pueden crear/modificar turnos
-- [ ] Recepcionista puede ver turnos
-- [ ] Notificaciones para turnos próximos (opcional)
+## 🚧 Módulos Pendientes del MVP (Para retomar luego)
 
 ---
 
@@ -146,13 +126,12 @@
 
 ---
 
-## 📋 Orden de Implementación Sugerido
+## 📋 Orden de Implementación Sugerido (Para futuras versiones)
 
-1. **Módulo de Turnos/Agenda** ← PRÓXIMO (crítico para MVP)
-2. **Módulo de Ventas y Compras** (importante para operación completa)
-3. **Reportes Avanzados** (mejora la utilidad)
-4. **Comunicación WhatsApp** (nice to have)
-5. **Configuración Avanzada** (opcional)
+1. **Módulo de Ventas y Compras** ← PRÓXIMO (importante para operación completa)
+2. **Reportes Avanzados** (mejora la utilidad)
+3. **Comunicación WhatsApp** (nice to have)
+4. **Configuración Avanzada** (opcional)
 
 ---
 
@@ -194,10 +173,28 @@
 
 - **Repo**: https://github.com/MezeLaw/iris-api
 - **Branch actual**: qa
-- **Último PR**: #11 (Módulo Pacientes)
-- **Documentación**: CLAUDE.md, ANALISIS_CODIGO.md
+- **Último PR**: #12 (Módulo Turnos/Agenda)
+- **Documentación**: CLAUDE.md
 
 ---
 
-**Última actualización**: 2025-10-28
-**Próximo paso**: Implementar Módulo de Turnos/Agenda
+## 🎉 Estado Actual del MVP
+
+**MVP CORE COMPLETADO** ✅
+
+El sistema actual ya cuenta con funcionalidad completa para:
+- ✅ Gestión de usuarios multi-tenant con roles
+- ✅ Gestión completa de pacientes con historial médico y visual
+- ✅ Sistema de exámenes visuales con comparación y alertas
+- ✅ Agenda y gestión de turnos con validación de disponibilidad
+- ✅ Reportes básicos de actividad
+
+**Total de endpoints REST**: ~35+
+**Autenticación**: JWT con multi-tenancy
+**Base de datos**: PostgreSQL con 8 migraciones
+
+---
+
+**Última actualización**: 2025-11-01
+**Estado**: MVP Core funcional - Listo para testing y deploy
+**Próximos pasos**: Módulo de Ventas y Compras (cuando se retome el desarrollo)
