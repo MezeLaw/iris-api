@@ -96,7 +96,7 @@ func main() {
 	// For now, routes are public for backward compatibility
 	routes.SetupUserRoutes(router, userHandler)
 	routes.SetupRecetaRoutes(router, recetaHandler)
-	routes.SetupTurnoRoutes(router, turnoHandler)
+	routes.SetupTurnoRoutes(router, turnoHandler, authMiddleware)
 	routes.SetupReporteriaRoutes(router, reporteriaHandler, authMiddleware)
 	routes.SetupPacienteRoutes(router, pacienteHandler, authMiddleware)
 

@@ -10,17 +10,20 @@ import (
 )
 
 type TurnoService interface {
-	CreateTurno(ctx context.Context, req *entities.CreateTurnoRequest) (*entities.Turno, error)
-	GetTurnoByID(ctx context.Context, id int64) (*entities.TurnoConDetalles, error)
-	GetTurnos(ctx context.Context, filter *entities.TurnoFilter) ([]*entities.TurnoConDetalles, error)
-	UpdateTurno(ctx context.Context, id int64, req *entities.UpdateTurnoRequest) (*entities.Turno, error)
-	CancelTurno(ctx context.Context, id int64, motivo string) error
-	DeleteTurno(ctx context.Context, id int64) error
-	GetTurnosByDia(ctx context.Context, fecha time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error)
-	GetTurnosBySemana(ctx context.Context, fechaInicio time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error)
-	GetTurnosByProfesional(ctx context.Context, contactologoID int64, fechaDesde, fechaHasta time.Time) ([]*entities.TurnoConDetalles, error)
-	GetProximosTurnosAlert(ctx context.Context) (*entities.ProximosTurnosAlert, error)
-	CountTurnos(ctx context.Context, filter *entities.TurnoFilter) (int, error)
+	CreateTurno(ctx context.Context, req *entities.CreateTurnoRequest, clientID int64) (*entities.Turno, error)
+	GetTurnoByID(ctx context.Context, id int64, clientID int64) (*entities.TurnoConDetalles, error)
+	GetTurnos(ctx context.Context, filters *entities.TurnoFilters, clientID int64) ([]*entities.TurnoConDetalles, int, error)
+	UpdateTurno(ctx context.Context, id int64, req *entities.UpdateTurnoRequest, clientID int64) (*entities.Turno, error)
+	DeleteTurno(ctx context.Context, id int64, clientID int64) error
+	CambiarEstado(ctx context.Context, id int64, req *entities.CambiarEstadoRequest, clientID int64) error
+
+	// Vistas específicas
+	GetTurnosByDia(ctx context.Context, fecha time.Time, profesionalID *int64, clientID int64) ([]*entities.TurnoConDetalles, error)
+	GetTurnosBySemana(ctx context.Context, fechaInicio time.Time, profesionalID *int64, clientID int64) ([]*entities.TurnoConDetalles, error)
+	GetTurnosByProfesional(ctx context.Context, profesionalID int64, fechaDesde, fechaHasta *time.Time, clientID int64) ([]*entities.TurnoConDetalles, error)
+
+	// Validaciones
+	CheckDisponibilidad(ctx context.Context, req *entities.DisponibilidadRequest, clientID int64) (*entities.DisponibilidadResponse, error)
 }
 
 type turnoService struct {
@@ -33,56 +36,69 @@ func NewTurnoService(turnoRepo repositories.TurnoRepository) TurnoService {
 	}
 }
 
-func (s *turnoService) CreateTurno(ctx context.Context, req *entities.CreateTurnoRequest) (*entities.Turno, error) {
+func (s *turnoService) CreateTurno(ctx context.Context, req *entities.CreateTurnoRequest, clientID int64) (*entities.Turno, error) {
 	// Validar que la fecha no sea en el pasado
 	if req.FechaHora.Before(time.Now()) {
 		return nil, errors.New("no se puede crear un turno en el pasado")
 	}
 
 	// Verificar disponibilidad del profesional
-	disponible, err := s.turnoRepo.CheckDisponibilidad(ctx, req.ContactologoID, req.FechaHora, req.DuracionMinutos, nil)
+	dispReq := &entities.DisponibilidadRequest{
+		ProfesionalUserID: req.ProfesionalUserID,
+		FechaHora:         req.FechaHora,
+		DuracionMinutos:   req.DuracionMinutos,
+	}
+
+	dispResp, err := s.turnoRepo.CheckDisponibilidad(ctx, dispReq, clientID)
 	if err != nil {
 		return nil, err
 	}
-	if !disponible {
-		return nil, errors.New("el profesional no está disponible en ese horario")
+	if !dispResp.Disponible {
+		return nil, errors.New(dispResp.Mensaje)
 	}
 
+	// Calcular hora_fin
+	horaFin := req.FechaHora.Add(time.Duration(req.DuracionMinutos) * time.Minute)
+
 	turno := &entities.Turno{
-		PacienteID:          req.PacienteID,
-		ContactologoID:      req.ContactologoID,
-		FechaHora:           req.FechaHora,
-		DuracionMinutos:     req.DuracionMinutos,
-		TipoServicio:        req.TipoServicio,
-		Estado:              entities.EstadoPendiente,
-		Motivo:              req.Motivo,
-		Observaciones:       req.Observaciones,
-		RecordatorioEnviado: false,
-		CreatedAt:           time.Now(),
-		UpdatedAt:           time.Now(),
+		ClientID:          clientID,
+		PacienteID:        req.PacienteID,
+		ProfesionalUserID: req.ProfesionalUserID,
+		TipoServicio:      req.TipoServicio,
+		FechaHora:         req.FechaHora,
+		DuracionMinutos:   req.DuracionMinutos,
+		HoraFin:           horaFin,
+		Estado:            entities.EstadoPendiente,
+		Observaciones:     req.Observaciones,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
 	}
 
 	return s.turnoRepo.Create(ctx, turno)
 }
 
-func (s *turnoService) GetTurnoByID(ctx context.Context, id int64) (*entities.TurnoConDetalles, error) {
-	return s.turnoRepo.GetByID(ctx, id)
+func (s *turnoService) GetTurnoByID(ctx context.Context, id int64, clientID int64) (*entities.TurnoConDetalles, error) {
+	return s.turnoRepo.GetByID(ctx, id, clientID)
 }
 
-func (s *turnoService) GetTurnos(ctx context.Context, filter *entities.TurnoFilter) ([]*entities.TurnoConDetalles, error) {
-	if filter.Limit <= 0 {
-		filter.Limit = 10
+func (s *turnoService) GetTurnos(ctx context.Context, filters *entities.TurnoFilters, clientID int64) ([]*entities.TurnoConDetalles, int, error) {
+	// Validar paginación
+	if filters.Page <= 0 {
+		filters.Page = 1
 	}
-	if filter.Offset < 0 {
-		filter.Offset = 0
+	if filters.PageSize <= 0 {
+		filters.PageSize = 10
+	}
+	if filters.PageSize > 100 {
+		filters.PageSize = 100
 	}
 
-	return s.turnoRepo.GetAll(ctx, filter)
+	return s.turnoRepo.GetAll(ctx, filters, clientID)
 }
 
-func (s *turnoService) UpdateTurno(ctx context.Context, id int64, req *entities.UpdateTurnoRequest) (*entities.Turno, error) {
+func (s *turnoService) UpdateTurno(ctx context.Context, id int64, req *entities.UpdateTurnoRequest, clientID int64) (*entities.Turno, error) {
 	// Obtener turno existente
-	existingTurno, err := s.turnoRepo.GetByID(ctx, id)
+	existingTurno, err := s.turnoRepo.GetByID(ctx, id, clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -92,120 +108,114 @@ func (s *turnoService) UpdateTurno(ctx context.Context, id int64, req *entities.
 		return nil, errors.New("no se puede modificar un turno completado o cancelado")
 	}
 
-	// Construir turno actualizado
+	// Construir turno actualizado (empezar con valores existentes)
 	turno := &entities.Turno{
-		ID:                  id,
-		PacienteID:          existingTurno.PacienteID,
-		ContactologoID:      existingTurno.ContactologoID,
-		FechaHora:           existingTurno.FechaHora,
-		DuracionMinutos:     existingTurno.DuracionMinutos,
-		TipoServicio:        existingTurno.TipoServicio,
-		Estado:              existingTurno.Estado,
-		Motivo:              existingTurno.Motivo,
-		Observaciones:       existingTurno.Observaciones,
-		RecordatorioEnviado: existingTurno.RecordatorioEnviado,
-		UpdatedAt:           time.Now(),
+		ID:                id,
+		ClientID:          clientID,
+		PacienteID:        existingTurno.PacienteID,
+		ProfesionalUserID: existingTurno.ProfesionalUserID,
+		TipoServicio:      existingTurno.TipoServicio,
+		FechaHora:         existingTurno.FechaHora,
+		DuracionMinutos:   existingTurno.DuracionMinutos,
+		HoraFin:           existingTurno.HoraFin,
+		Estado:            existingTurno.Estado,
+		Observaciones:     existingTurno.Observaciones,
+		UpdatedAt:         time.Now(),
 	}
 
 	// Aplicar cambios
-	if req.FechaHora != nil {
-		if req.FechaHora.Before(time.Now()) {
-			return nil, errors.New("no se puede programar un turno en el pasado")
-		}
-
-		duracion := existingTurno.DuracionMinutos
-		if req.DuracionMinutos != nil {
-			duracion = *req.DuracionMinutos
-		}
-
-		// Verificar disponibilidad si se cambia la fecha/hora
-		disponible, err := s.turnoRepo.CheckDisponibilidad(ctx, existingTurno.ContactologoID, *req.FechaHora, duracion, &id)
-		if err != nil {
-			return nil, err
-		}
-		if !disponible {
-			return nil, errors.New("el profesional no está disponible en ese horario")
-		}
-
-		turno.FechaHora = *req.FechaHora
-	}
-
-	if req.DuracionMinutos != nil {
-		turno.DuracionMinutos = *req.DuracionMinutos
+	if req.ProfesionalUserID != nil {
+		turno.ProfesionalUserID = *req.ProfesionalUserID
 	}
 	if req.TipoServicio != nil {
 		turno.TipoServicio = *req.TipoServicio
 	}
-	if req.Estado != nil {
-		turno.Estado = *req.Estado
-	}
-	if req.Motivo != nil {
-		turno.Motivo = *req.Motivo
+	if req.DuracionMinutos != nil {
+		turno.DuracionMinutos = *req.DuracionMinutos
 	}
 	if req.Observaciones != nil {
 		turno.Observaciones = *req.Observaciones
 	}
 
-	return s.turnoRepo.Update(ctx, id, turno)
+	// Si se cambia la fecha/hora, validar disponibilidad
+	if req.FechaHora != nil {
+		if req.FechaHora.Before(time.Now()) {
+			return nil, errors.New("no se puede programar un turno en el pasado")
+		}
+
+		// Verificar disponibilidad
+		dispReq := &entities.DisponibilidadRequest{
+			ProfesionalUserID: turno.ProfesionalUserID,
+			FechaHora:         *req.FechaHora,
+			DuracionMinutos:   turno.DuracionMinutos,
+			TurnoID:           &id, // Excluir el turno actual
+		}
+
+		dispResp, err := s.turnoRepo.CheckDisponibilidad(ctx, dispReq, clientID)
+		if err != nil {
+			return nil, err
+		}
+		if !dispResp.Disponible {
+			return nil, errors.New(dispResp.Mensaje)
+		}
+
+		turno.FechaHora = *req.FechaHora
+	}
+
+	// Recalcular hora_fin
+	turno.HoraFin = turno.FechaHora.Add(time.Duration(turno.DuracionMinutos) * time.Minute)
+
+	return s.turnoRepo.Update(ctx, id, turno, clientID)
 }
 
-func (s *turnoService) CancelTurno(ctx context.Context, id int64, motivo string) error {
-	// Obtener turno existente
-	existingTurno, err := s.turnoRepo.GetByID(ctx, id)
+func (s *turnoService) DeleteTurno(ctx context.Context, id int64, clientID int64) error {
+	// Verificar que el turno existe
+	_, err := s.turnoRepo.GetByID(ctx, id, clientID)
 	if err != nil {
 		return err
 	}
 
-	// Validar que no esté ya cancelado o completado
-	if existingTurno.Estado == entities.EstadoCancelado {
-		return errors.New("el turno ya está cancelado")
-	}
-	if existingTurno.Estado == entities.EstadoCompletado {
-		return errors.New("no se puede cancelar un turno completado")
-	}
-
-	return s.turnoRepo.CancelTurno(ctx, id, motivo)
+	return s.turnoRepo.Delete(ctx, id, clientID)
 }
 
-func (s *turnoService) DeleteTurno(ctx context.Context, id int64) error {
-	return s.turnoRepo.Delete(ctx, id)
+func (s *turnoService) CambiarEstado(ctx context.Context, id int64, req *entities.CambiarEstadoRequest, clientID int64) error {
+	// Validar que el estado sea válido
+	if !req.Estado.IsValid() {
+		return errors.New("estado inválido")
+	}
+
+	// Obtener turno existente
+	existingTurno, err := s.turnoRepo.GetByID(ctx, id, clientID)
+	if err != nil {
+		return err
+	}
+
+	// Validaciones de estado
+	if existingTurno.Estado == entities.EstadoCancelado && req.Estado != entities.EstadoCancelado {
+		return errors.New("no se puede cambiar el estado de un turno cancelado")
+	}
+
+	if existingTurno.Estado == entities.EstadoCompletado && req.Estado != entities.EstadoCompletado {
+		return errors.New("no se puede cambiar el estado de un turno completado")
+	}
+
+	return s.turnoRepo.CambiarEstado(ctx, id, req.Estado, clientID)
 }
 
 // Vistas específicas
-func (s *turnoService) GetTurnosByDia(ctx context.Context, fecha time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error) {
-	return s.turnoRepo.GetByDia(ctx, fecha, contactologoID)
+func (s *turnoService) GetTurnosByDia(ctx context.Context, fecha time.Time, profesionalID *int64, clientID int64) ([]*entities.TurnoConDetalles, error) {
+	return s.turnoRepo.GetByDia(ctx, fecha, profesionalID, clientID)
 }
 
-func (s *turnoService) GetTurnosBySemana(ctx context.Context, fechaInicio time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error) {
-	return s.turnoRepo.GetBySemana(ctx, fechaInicio, contactologoID)
+func (s *turnoService) GetTurnosBySemana(ctx context.Context, fechaInicio time.Time, profesionalID *int64, clientID int64) ([]*entities.TurnoConDetalles, error) {
+	return s.turnoRepo.GetBySemana(ctx, fechaInicio, profesionalID, clientID)
 }
 
-func (s *turnoService) GetTurnosByProfesional(ctx context.Context, contactologoID int64, fechaDesde, fechaHasta time.Time) ([]*entities.TurnoConDetalles, error) {
-	return s.turnoRepo.GetByProfesional(ctx, contactologoID, fechaDesde, fechaHasta)
+func (s *turnoService) GetTurnosByProfesional(ctx context.Context, profesionalID int64, fechaDesde, fechaHasta *time.Time, clientID int64) ([]*entities.TurnoConDetalles, error) {
+	return s.turnoRepo.GetByProfesional(ctx, profesionalID, fechaDesde, fechaHasta, clientID)
 }
 
-// Alertas
-func (s *turnoService) GetProximosTurnosAlert(ctx context.Context) (*entities.ProximosTurnosAlert, error) {
-	// Obtener turnos de las próximas 24 horas
-	turnos24h, err := s.turnoRepo.GetProximosTurnos(ctx, 24)
-	if err != nil {
-		return nil, err
-	}
-
-	// Obtener turnos sin confirmar
-	turnosSinConfirmar, err := s.turnoRepo.GetTurnosSinConfirmar(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return &entities.ProximosTurnosAlert{
-		TurnosProximas24h:  turnos24h,
-		TurnosSinConfirmar: turnosSinConfirmar,
-		Count24h:           len(turnos24h),
-		CountSinConfirmar:  len(turnosSinConfirmar),
-	}, nil
-}
-
-func (s *turnoService) CountTurnos(ctx context.Context, filter *entities.TurnoFilter) (int, error) {
-	return s.turnoRepo.Count(ctx, filter)
+// Validaciones
+func (s *turnoService) CheckDisponibilidad(ctx context.Context, req *entities.DisponibilidadRequest, clientID int64) (*entities.DisponibilidadResponse, error) {
+	return s.turnoRepo.CheckDisponibilidad(ctx, req, clientID)
 }
