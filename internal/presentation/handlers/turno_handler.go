@@ -1,40 +1,28 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"iris-api/internal/application/usecases"
 	"iris-api/internal/domain/entities"
 )
 
-// TurnoUseCase interface defines the methods needed by TurnoHandler
-type TurnoUseCase interface {
-	CreateTurno(ctx context.Context, req *entities.CreateTurnoRequest) (*entities.Turno, error)
-	GetTurnoByID(ctx context.Context, id int64) (*entities.TurnoConDetalles, error)
-	GetTurnos(ctx context.Context, filter *entities.TurnoFilter) (map[string]interface{}, error)
-	UpdateTurno(ctx context.Context, id int64, req *entities.UpdateTurnoRequest) (*entities.Turno, error)
-	CancelTurno(ctx context.Context, id int64, motivo string) error
-	DeleteTurno(ctx context.Context, id int64) error
-	GetTurnosByDia(ctx context.Context, fecha time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error)
-	GetTurnosBySemana(ctx context.Context, fechaInicio time.Time, contactologoID *int64) ([]*entities.TurnoConDetalles, error)
-	GetTurnosByProfesional(ctx context.Context, contactologoID int64, fechaDesde, fechaHasta time.Time) ([]*entities.TurnoConDetalles, error)
-	GetProximosTurnosAlert(ctx context.Context) (*entities.ProximosTurnosAlert, error)
-}
-
 type TurnoHandler struct {
-	turnoUseCase TurnoUseCase
+	turnoUseCase usecases.TurnoUseCase
 }
 
-func NewTurnoHandler(turnoUseCase TurnoUseCase) *TurnoHandler {
+func NewTurnoHandler(turnoUseCase usecases.TurnoUseCase) *TurnoHandler {
 	return &TurnoHandler{
 		turnoUseCase: turnoUseCase,
 	}
 }
 
+// CreateTurno creates a new turno
+// POST /api/v1/turnos
 func (h *TurnoHandler) CreateTurno(c *gin.Context) {
 	var req entities.CreateTurnoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -45,7 +33,16 @@ func (h *TurnoHandler) CreateTurno(c *gin.Context) {
 		return
 	}
 
-	turno, err := h.turnoUseCase.CreateTurno(c.Request.Context(), &req)
+	// Get clientID from context (set by auth middleware)
+	clientID, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Client ID not found in context",
+		})
+		return
+	}
+
+	turno, err := h.turnoUseCase.CreateTurno(c.Request.Context(), &req, clientID.(int64))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Failed to create turno",
@@ -60,6 +57,8 @@ func (h *TurnoHandler) CreateTurno(c *gin.Context) {
 	})
 }
 
+// GetTurnoByID retrieves a turno by ID
+// GET /api/v1/turnos/:id
 func (h *TurnoHandler) GetTurnoByID(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.ParseInt(idParam, 10, 64)
@@ -71,7 +70,15 @@ func (h *TurnoHandler) GetTurnoByID(c *gin.Context) {
 		return
 	}
 
-	turno, err := h.turnoUseCase.GetTurnoByID(c.Request.Context(), id)
+	clientID, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Client ID not found in context",
+		})
+		return
+	}
+
+	turno, err := h.turnoUseCase.GetTurnoByID(c.Request.Context(), id, clientID.(int64))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":   "Turno not found",
@@ -86,59 +93,64 @@ func (h *TurnoHandler) GetTurnoByID(c *gin.Context) {
 	})
 }
 
+// GetTurnos retrieves all turnos with filters and pagination
+// GET /api/v1/turnos
 func (h *TurnoHandler) GetTurnos(c *gin.Context) {
-	filter := &entities.TurnoFilter{
-		Limit:  10,
-		Offset: 0,
+	filters := &entities.TurnoFilters{
+		Page:     1,
+		PageSize: 10,
 	}
 
-	if limit := c.Query("limit"); limit != "" {
-		if val, err := strconv.Atoi(limit); err == nil && val > 0 {
-			filter.Limit = val
+	if page := c.Query("page"); page != "" {
+		if val, err := strconv.Atoi(page); err == nil && val > 0 {
+			filters.Page = val
 		}
 	}
 
-	if offset := c.Query("offset"); offset != "" {
-		if val, err := strconv.Atoi(offset); err == nil && val >= 0 {
-			filter.Offset = val
+	if pageSize := c.Query("page_size"); pageSize != "" {
+		if val, err := strconv.Atoi(pageSize); err == nil && val > 0 {
+			filters.PageSize = val
 		}
 	}
 
 	if pacienteID := c.Query("paciente_id"); pacienteID != "" {
 		if val, err := strconv.ParseInt(pacienteID, 10, 64); err == nil {
-			filter.PacienteID = &val
+			filters.PacienteID = &val
 		}
 	}
 
-	if contactologoID := c.Query("contactologo_id"); contactologoID != "" {
-		if val, err := strconv.ParseInt(contactologoID, 10, 64); err == nil {
-			filter.ContactologoID = &val
+	if profesionalID := c.Query("profesional_user_id"); profesionalID != "" {
+		if val, err := strconv.ParseInt(profesionalID, 10, 64); err == nil {
+			filters.ProfesionalUserID = &val
 		}
-	}
-
-	if tipoServicio := c.Query("tipo_servicio"); tipoServicio != "" {
-		ts := entities.TipoServicio(tipoServicio)
-		filter.TipoServicio = &ts
 	}
 
 	if estado := c.Query("estado"); estado != "" {
 		est := entities.EstadoTurno(estado)
-		filter.Estado = &est
+		filters.Estado = &est
 	}
 
 	if fechaDesde := c.Query("fecha_desde"); fechaDesde != "" {
 		if val, err := time.Parse(time.RFC3339, fechaDesde); err == nil {
-			filter.FechaDesde = &val
+			filters.FechaDesde = &val
 		}
 	}
 
 	if fechaHasta := c.Query("fecha_hasta"); fechaHasta != "" {
 		if val, err := time.Parse(time.RFC3339, fechaHasta); err == nil {
-			filter.FechaHasta = &val
+			filters.FechaHasta = &val
 		}
 	}
 
-	response, err := h.turnoUseCase.GetTurnos(c.Request.Context(), filter)
+	clientID, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Client ID not found in context",
+		})
+		return
+	}
+
+	response, err := h.turnoUseCase.GetTurnos(c.Request.Context(), filters, clientID.(int64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to retrieve turnos",
@@ -153,6 +165,8 @@ func (h *TurnoHandler) GetTurnos(c *gin.Context) {
 	})
 }
 
+// UpdateTurno updates a turno
+// PUT /api/v1/turnos/:id
 func (h *TurnoHandler) UpdateTurno(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.ParseInt(idParam, 10, 64)
@@ -173,7 +187,15 @@ func (h *TurnoHandler) UpdateTurno(c *gin.Context) {
 		return
 	}
 
-	turno, err := h.turnoUseCase.UpdateTurno(c.Request.Context(), id, &req)
+	clientID, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Client ID not found in context",
+		})
+		return
+	}
+
+	turno, err := h.turnoUseCase.UpdateTurno(c.Request.Context(), id, &req, clientID.(int64))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Failed to update turno",
@@ -188,7 +210,9 @@ func (h *TurnoHandler) UpdateTurno(c *gin.Context) {
 	})
 }
 
-func (h *TurnoHandler) CancelTurno(c *gin.Context) {
+// CambiarEstado changes the estado of a turno
+// PATCH /api/v1/turnos/:id/estado
+func (h *TurnoHandler) CambiarEstado(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.ParseInt(idParam, 10, 64)
 	if err != nil {
@@ -199,10 +223,7 @@ func (h *TurnoHandler) CancelTurno(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Motivo string `json:"motivo" validate:"required,max=500"`
-	}
-
+	var req entities.CambiarEstadoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Invalid request body",
@@ -211,20 +232,30 @@ func (h *TurnoHandler) CancelTurno(c *gin.Context) {
 		return
 	}
 
-	err = h.turnoUseCase.CancelTurno(c.Request.Context(), id, req.Motivo)
+	clientID, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Client ID not found in context",
+		})
+		return
+	}
+
+	err = h.turnoUseCase.CambiarEstado(c.Request.Context(), id, &req, clientID.(int64))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Failed to cancel turno",
+			"error":   "Failed to change turno estado",
 			"details": err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Turno cancelled successfully",
+		"message": "Turno estado changed successfully",
 	})
 }
 
+// DeleteTurno soft deletes a turno
+// DELETE /api/v1/turnos/:id
 func (h *TurnoHandler) DeleteTurno(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.ParseInt(idParam, 10, 64)
@@ -236,7 +267,15 @@ func (h *TurnoHandler) DeleteTurno(c *gin.Context) {
 		return
 	}
 
-	err = h.turnoUseCase.DeleteTurno(c.Request.Context(), id)
+	clientID, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Client ID not found in context",
+		})
+		return
+	}
+
+	err = h.turnoUseCase.DeleteTurno(c.Request.Context(), id, clientID.(int64))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":   "Failed to delete turno",
@@ -245,12 +284,15 @@ func (h *TurnoHandler) DeleteTurno(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Turno deleted successfully",
+	})
 }
 
-// Vista por día
+// GetTurnosByDia retrieves turnos for a specific day
+// GET /api/v1/turnos/por-dia/:fecha
 func (h *TurnoHandler) GetTurnosByDia(c *gin.Context) {
-	fechaParam := c.Query("fecha")
+	fechaParam := c.Param("fecha")
 	if fechaParam == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Missing fecha parameter",
@@ -268,14 +310,22 @@ func (h *TurnoHandler) GetTurnosByDia(c *gin.Context) {
 		return
 	}
 
-	var contactologoID *int64
-	if contactologoParam := c.Query("contactologo_id"); contactologoParam != "" {
-		if val, err := strconv.ParseInt(contactologoParam, 10, 64); err == nil {
-			contactologoID = &val
+	var profesionalID *int64
+	if profesionalParam := c.Query("profesional_user_id"); profesionalParam != "" {
+		if val, err := strconv.ParseInt(profesionalParam, 10, 64); err == nil {
+			profesionalID = &val
 		}
 	}
 
-	turnos, err := h.turnoUseCase.GetTurnosByDia(c.Request.Context(), fecha, contactologoID)
+	clientID, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Client ID not found in context",
+		})
+		return
+	}
+
+	turnos, err := h.turnoUseCase.GetTurnosByDia(c.Request.Context(), fecha, profesionalID, clientID.(int64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to retrieve turnos",
@@ -290,9 +340,10 @@ func (h *TurnoHandler) GetTurnosByDia(c *gin.Context) {
 	})
 }
 
-// Vista por semana
+// GetTurnosBySemana retrieves turnos for a specific week
+// GET /api/v1/turnos/por-semana/:fecha_inicio
 func (h *TurnoHandler) GetTurnosBySemana(c *gin.Context) {
-	fechaParam := c.Query("fecha_inicio")
+	fechaParam := c.Param("fecha_inicio")
 	if fechaParam == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Missing fecha_inicio parameter",
@@ -310,14 +361,22 @@ func (h *TurnoHandler) GetTurnosBySemana(c *gin.Context) {
 		return
 	}
 
-	var contactologoID *int64
-	if contactologoParam := c.Query("contactologo_id"); contactologoParam != "" {
-		if val, err := strconv.ParseInt(contactologoParam, 10, 64); err == nil {
-			contactologoID = &val
+	var profesionalID *int64
+	if profesionalParam := c.Query("profesional_user_id"); profesionalParam != "" {
+		if val, err := strconv.ParseInt(profesionalParam, 10, 64); err == nil {
+			profesionalID = &val
 		}
 	}
 
-	turnos, err := h.turnoUseCase.GetTurnosBySemana(c.Request.Context(), fechaInicio, contactologoID)
+	clientID, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Client ID not found in context",
+		})
+		return
+	}
+
+	turnos, err := h.turnoUseCase.GetTurnosBySemana(c.Request.Context(), fechaInicio, profesionalID, clientID.(int64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to retrieve turnos",
@@ -332,48 +391,41 @@ func (h *TurnoHandler) GetTurnosBySemana(c *gin.Context) {
 	})
 }
 
-// Vista por profesional
+// GetTurnosByProfesional retrieves turnos for a specific professional
+// GET /api/v1/turnos/por-profesional/:user_id
 func (h *TurnoHandler) GetTurnosByProfesional(c *gin.Context) {
-	contactologoIDParam := c.Param("contactologo_id")
-	contactologoID, err := strconv.ParseInt(contactologoIDParam, 10, 64)
+	profesionalIDParam := c.Param("user_id")
+	profesionalID, err := strconv.ParseInt(profesionalIDParam, 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid contactologo ID",
-			"details": "Contactologo ID must be a number",
+			"error":   "Invalid profesional ID",
+			"details": "Profesional ID must be a number",
 		})
 		return
 	}
 
-	fechaDesdeParam := c.Query("fecha_desde")
-	fechaHastaParam := c.Query("fecha_hasta")
+	var fechaDesde, fechaHasta *time.Time
+	if fechaDesdeParam := c.Query("fecha_desde"); fechaDesdeParam != "" {
+		if val, err := time.Parse("2006-01-02", fechaDesdeParam); err == nil {
+			fechaDesde = &val
+		}
+	}
 
-	if fechaDesdeParam == "" || fechaHastaParam == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Missing date parameters",
-			"details": "fecha_desde and fecha_hasta are required (format: YYYY-MM-DD)",
+	if fechaHastaParam := c.Query("fecha_hasta"); fechaHastaParam != "" {
+		if val, err := time.Parse("2006-01-02", fechaHastaParam); err == nil {
+			fechaHasta = &val
+		}
+	}
+
+	clientID, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Client ID not found in context",
 		})
 		return
 	}
 
-	fechaDesde, err := time.Parse("2006-01-02", fechaDesdeParam)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid fecha_desde format",
-			"details": "fecha_desde must be in format YYYY-MM-DD",
-		})
-		return
-	}
-
-	fechaHasta, err := time.Parse("2006-01-02", fechaHastaParam)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid fecha_hasta format",
-			"details": "fecha_hasta must be in format YYYY-MM-DD",
-		})
-		return
-	}
-
-	turnos, err := h.turnoUseCase.GetTurnosByProfesional(c.Request.Context(), contactologoID, fechaDesde, fechaHasta)
+	turnos, err := h.turnoUseCase.GetTurnosByProfesional(c.Request.Context(), profesionalID, fechaDesde, fechaHasta, clientID.(int64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to retrieve turnos",
@@ -388,19 +440,37 @@ func (h *TurnoHandler) GetTurnosByProfesional(c *gin.Context) {
 	})
 }
 
-// Alertas de turnos próximos
-func (h *TurnoHandler) GetProximosTurnosAlert(c *gin.Context) {
-	alert, err := h.turnoUseCase.GetProximosTurnosAlert(c.Request.Context())
+// CheckDisponibilidad checks if a professional is available at a specific time
+// POST /api/v1/turnos/disponibilidad
+func (h *TurnoHandler) CheckDisponibilidad(c *gin.Context) {
+	var req entities.DisponibilidadRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	clientID, exists := c.Get("client_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Client ID not found in context",
+		})
+		return
+	}
+
+	response, err := h.turnoUseCase.CheckDisponibilidad(c.Request.Context(), &req, clientID.(int64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to retrieve alerts",
+			"error":   "Failed to check disponibilidad",
 			"details": err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Alerts retrieved successfully",
-		"data":    alert,
+		"message": "Disponibilidad checked successfully",
+		"data":    response,
 	})
 }
