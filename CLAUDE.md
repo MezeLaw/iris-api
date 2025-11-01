@@ -109,6 +109,14 @@ The application uses environment variables for configuration:
 
 ## Existing Services
 
+### Authentication Service
+JWT-based authentication with role-based access control:
+- `POST /api/v1/auth/register` - Register new user
+- `POST /api/v1/auth/login` - Login (returns JWT token)
+- `POST /api/v1/auth/validate` - Validate JWT token
+- **Roles**: admin, optometrista, recepcionista
+- **Multi-tenant**: Supports client_id isolation
+
 ### User Service
 Complete CRUD operations for users with the following endpoints:
 - `GET /api/v1/users` - List users with pagination
@@ -117,12 +125,60 @@ Complete CRUD operations for users with the following endpoints:
 - `PUT /api/v1/users/{id}` - Update user
 - `DELETE /api/v1/users/{id}` - Delete user
 
-Health check endpoint: `GET /health`
+### Pacientes Service (Patient Management)
+Comprehensive patient management with medical/visual history and refraction exams:
+
+**Patients:**
+- `POST /api/v1/pacientes` - Create patient (with nested antecedentes)
+- `GET /api/v1/pacientes` - List with pagination
+- `GET /api/v1/pacientes/search?q=query` - Search by name/DNI/email/phone
+- `GET /api/v1/pacientes/:id?complete=true` - Get patient (optionally with full data)
+- `PUT /api/v1/pacientes/:id` - Update patient
+- `DELETE /api/v1/pacientes/:id` - Soft delete
+
+**Medical History (Antecedentes Médicos):**
+- `PUT /api/v1/pacientes/:id/antecedentes-medicos` - Create/Update medical history
+- `GET /api/v1/pacientes/:id/antecedentes-medicos` - Get medical history
+
+**Visual History (Antecedentes Visuales):**
+- `PUT /api/v1/pacientes/:id/antecedentes-visuales` - Create/Update visual history
+- `GET /api/v1/pacientes/:id/antecedentes-visuales` - Get visual history
+
+**Visual Exams (Exámenes Visuales / Refracción):**
+- `GET /api/v1/pacientes/:id/examenes` - List all exams for patient
+- `POST /api/v1/examenes-visuales` - Create exam
+- `GET /api/v1/examenes-visuales/:examenId` - Get exam
+- `PUT /api/v1/examenes-visuales/:examenId` - Update exam
+- `DELETE /api/v1/examenes-visuales/:examenId` - Delete exam
+- `GET /api/v1/examenes-visuales/comparar?anterior=X&actual=Y` - Compare two exams (alerts for >0.25D changes)
+
+**Features:**
+- Multi-tenant (client_id isolation)
+- Soft delete for patients
+- Search and pagination
+- Automatic age calculation
+- Refraction comparison with alerts
+- All routes protected with JWT authentication
+
+### Reportería Service
+Basic reporting endpoints:
+- `GET /api/v1/reportes/pacientes-activos` - Patients with appointments in last 60 days
+- `GET /api/v1/reportes/pacientes-inactivos` - Patients without appointments in 60+ days
+- Protected routes (admin/optometrista only)
+
+### Health Check
+- `GET /health` - Server health status
 
 ## Database Schema
 
 The project uses PostgreSQL with migration files in `/migrations/`:
 - `001_create_users_table.up.sql` - Creates users table with indexes
+- `002_create_clients_table.up.sql` - Creates clients table for multi-tenancy
+- `003_add_role_to_users.up.sql` - Adds role column to users
+- `004_create_recetas_table.up.sql` - Creates recetas (prescriptions) table
+- `005_create_turnos_table.up.sql` - Creates turnos (appointments) table
+- `006_add_client_id_to_existing_tables.up.sql` - Adds client_id for multi-tenancy
+- `007_create_pacientes_tables.up.sql` - Creates pacientes, antecedentes_medicos, antecedentes_visuales, examenes_visuales tables
 
 ## Adding New Services
 
